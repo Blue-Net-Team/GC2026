@@ -1,0 +1,26 @@
+color:
+  B:
+    L_S: 80
+    L_V: 20
+    U_S: 255
+    U_V: 255
+    centre: 109
+    error: 17
+  G:
+    L_S: 80
+    L_V: 20
+    U_S: 255
+    U_V: 255
+    centre: 65
+    error: 17
+  R:
+    L_S: 80
+    L_V: 20
+    U_S: 255
+    U_V: 255
+    centre: 0
+    error: 17
+max_material_area: 26000
+min_material_area: 300
+need2cut_height: 0
+target_angle: 46

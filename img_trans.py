@@ -22,6 +22,10 @@ import cv2
 from ImgTrans import SendImgUDP
 from ImgTrans.ImgTrans import LoadWebCam, NeedReConnect
 from utils import Cap
+from loguru import logger
+
+_log = logger.bind(module="img_trans")
+
 
 async def main_linux():
     """Linux平台的主函数"""
@@ -29,14 +33,19 @@ async def main_linux():
     cap = Cap()
     
     # 等待连接
+    _log.info(f"等待连接... 当前ip: {stream.host_ip}")
     while True:
         if await stream.connecting():
+            _log.info(f"连接成功，对端ip: {stream.clients_ip}")
             break
     
     # 主循环
     while True:
         try:
             img = cap.read()[1]
+            if img is None:
+                _log.warning("读取到空图片")
+                continue
             await stream.send(img)
         except NeedReConnect:
             while True:

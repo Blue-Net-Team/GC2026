@@ -1,0 +1,12 @@
+[Unit]
+Description=GPIO Setup Service
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/media/sdcard/code/Engineering-innovation-competition-vision/run_auto/run_main.sh
+RemainAfterExit=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target

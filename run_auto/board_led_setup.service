@@ -1,0 +1,12 @@
+[Unit]
+Description=Change Board LED
+After=network.target
+
+[Service]
+ExecStart=/media/sdcard/code/Engineering-innovation-competition-vision/run_auto/change_board_led.sh
+Type=simple
+RemainAfterExit=true
+User=root
+
+[Install]
+WantedBy=multi-user.target

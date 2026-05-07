@@ -1,0 +1,337 @@
+"""
+Copyright (C) 2025 IVEN-CN(He Yunfeng)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+色环检测器模块
+====
+提供了一个用于检测地面色环的识别器
+核心算法来自工创赛2025西安理工大学方案，通过放大圆环与底色的对比度实现强光抗干扰
+
+ColorRingDetector类
+----
+继承自 `Detect` 类，实现了色环检测的功能
+
+方法:
+    - `createTrackbar(self)`:
+        创建用于调整检测参数的滑动条窗口
+    - `__callback(self, x)`:
+        滑动条回调函数，用于更新检测参数
+    - `detect(self, _img)`:
+        检测图像中的色环
+
+        参数:
+            - `_img (numpy.ndarray)`: 需要检测的图像
+        返回:
+            `tuple`: 三个色环的中心坐标列表 [(x1,y1), (x2,y2), (x3,y3)]，如果没有检测到则返回 None
+    - `save_config(self, config_path)`:
+        保存当前配置到指定的配置文件中
+
+        参数:
+            - `config_path (str)`: 配置文件路径
+    - `load_config(self, config)`:
+        从指定的配置文件中加载配置
+
+        参数:
+            - `config (str|dict)`: 配置文件路径或配置字典
+"""
+
+import cv2
+import numpy as np
+from loguru import logger
+from .Detect import Detect
+
+_log = logger.bind(module="ColorRingDetector")
+
+class ColorRingDetector(Detect):
+    """
+    色环识别器
+    ----
+    * 通过放大圆环与底色的对比度，实现强光抗干扰的色环检测
+    * 核心思想：不做颜色分割，只针对圆环和非环底色之间的色彩差进行放大
+    * 适用于地面色环定位，能在高强对比度光线（阳光照射一半）情况下稳定识别
+
+    参数说明:
+    ----
+    预处理参数:
+        - erode_iter (int): 腐蚀操作迭代次数，默认2
+            * 值越大，图像越暗淡，噪声去除越强，但细节可能丢失
+        - dilate_kernel_size (int): 膨胀操作核大小，默认7
+            * 值越大，图像越亮，目标区域扩张越明显
+
+    对比度增强参数:
+        - clahe_clip_limit (float): CLAHE对比度限制参数，默认5.0
+            * 值越大，局部对比度增强越明显，但噪声也会放大
+        - clahe_tile_size (int): CLAHE分块大小，默认8
+            * 值越大，对比度增强范围越广，但局部细节可能丢失
+        - alpha (float): 对比度增强系数，默认4.0
+            * 值越大，图像对比度越高，边缘越明显
+
+    形态学与模糊参数:
+        - morph_kernel_size (int): 形态学梯度操作核大小，默认5
+            * 值越大，提取的边缘越粗
+        - gaussian_kernel_size (int): 高斯模糊核大小，默认7
+            * 值越大，图像越平滑，噪声越少，但边缘越模糊
+        - gaussian_sigma (float): 高斯模糊标准差，默认3.0
+            * 值越大，模糊程度越高
+        - threshold_value (int): 二值化阈值，默认70
+            * 值越大，保留的白色区域越少；值越小，保留的白色区域越多
+
+    霍夫圆检测参数:
+        - hough_dp (float): 累加器分辨率与图像分辨率的比值，默认1.5
+            * 值越大，检测精度越低，速度越快
+        - hough_min_dist (int): 检测到的圆心之间的最小距离，默认50
+            * 值越大，圆心距离越远才能被同时检测到
+        - hough_param1 (int): Canny边缘检测的高阈值，默认100
+            * 值越大，检测到的边缘越少
+        - hough_param2 (float): 累加器阈值，默认0.95
+            * 值越大，检测条件越严格，误检越少，但可能漏检
+        - min_radius (int): 检测圆的最小半径，默认15
+        - max_radius (int): 检测圆的最大半径，默认50
+        - expected_circles (int): 期望检测的圆数量，默认3
+    """
+
+    erode_iter: int = 2  # 腐蚀操作迭代次数
+    dilate_kernel_size: int = 7  # 膨胀操作核大小
+    clahe_clip_limit: float = 5.0  # CLAHE对比度限制参数
+    clahe_tile_size: int = 8  # CLAHE分块大小
+    morph_kernel_size: int = 5  # 形态学操作核大小
+    gaussian_kernel_size: int = 7  # 高斯模糊核大小
+    gaussian_sigma: float = 3.0  # 高斯模糊标准差
+    alpha: float = 4.0  # 对比度增强系数
+    threshold_value: int = 70  # 二值化阈值
+    hough_dp: float = 1.5  # 霍夫圆检测累加器分辨率比
+    hough_min_dist: int = 50  # 霍夫圆检测圆心最小间距
+    hough_param1: int = 100  # 霍夫圆检测Canny边缘检测高阈值
+    hough_param2: float = 0.95  # 霍夫圆检测累加器阈值
+    min_radius: int = 15  # 检测圆最小半径
+    max_radius: int = 50  # 检测圆最大半径
+    expected_circles: int = 3  # 期望检测的圆数量
+
+    @property
+    def dilate_kernel(self):
+        return np.ones((self.dilate_kernel_size, self.dilate_kernel_size), np.uint8)
+
+    @property
+    def morph_kernel(self):
+        return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.morph_kernel_size, self.morph_kernel_size))
+
+    def __callback(self, x):
+        try:
+            self.erode_iter = cv2.getTrackbarPos("erode_iter", "Trackbar")
+            self.dilate_kernel_size = cv2.getTrackbarPos("dilate_kernel", "Trackbar")
+            self.clahe_clip_limit = cv2.getTrackbarPos("clahe_clip", "Trackbar") / 10.0
+            self.clahe_tile_size = cv2.getTrackbarPos("clahe_tile", "Trackbar")
+            self.morph_kernel_size = cv2.getTrackbarPos("morph_kernel", "Trackbar")
+            self.gaussian_kernel_size = cv2.getTrackbarPos("gaussian_kernel", "Trackbar")
+            self.gaussian_sigma = cv2.getTrackbarPos("gaussian_sigma", "Trackbar") / 10.0
+            self.alpha = cv2.getTrackbarPos("alpha", "Trackbar") / 10.0
+            self.threshold_value = cv2.getTrackbarPos("threshold", "Trackbar")
+            self.hough_dp = cv2.getTrackbarPos("hough_dp", "Trackbar") / 10.0
+            self.hough_min_dist = cv2.getTrackbarPos("hough_min_dist", "Trackbar")
+            self.hough_param1 = cv2.getTrackbarPos("hough_p1", "Trackbar")
+            self.hough_param2 = cv2.getTrackbarPos("hough_p2", "Trackbar") / 100.0
+            self.min_radius = cv2.getTrackbarPos("min_radius", "Trackbar")
+            self.max_radius = cv2.getTrackbarPos("max_radius", "Trackbar")
+            self.expected_circles = cv2.getTrackbarPos("expected_circles", "Trackbar")
+        except:
+            pass
+
+    def createTrackbar(self):
+        cv2.namedWindow("Trackbar", cv2.WINDOW_NORMAL)
+        cv2.createTrackbar("erode_iter", "Trackbar", self.erode_iter, 10, self.__callback)
+        cv2.createTrackbar("dilate_kernel", "Trackbar", self.dilate_kernel_size, 15, self.__callback)
+        cv2.createTrackbar("clahe_clip", "Trackbar", int(self.clahe_clip_limit * 10), 50, self.__callback)
+        cv2.createTrackbar("clahe_tile", "Trackbar", self.clahe_tile_size, 16, self.__callback)
+        cv2.createTrackbar("morph_kernel", "Trackbar", self.morph_kernel_size, 15, self.__callback)
+        cv2.createTrackbar("gaussian_kernel", "Trackbar", self.gaussian_kernel_size, 15, self.__callback)
+        cv2.createTrackbar("gaussian_sigma", "Trackbar", int(self.gaussian_sigma * 10), 50, self.__callback)
+        cv2.createTrackbar("alpha", "Trackbar", int(self.alpha * 10), 100, self.__callback)
+        cv2.createTrackbar("threshold", "Trackbar", self.threshold_value, 255, self.__callback)
+        cv2.createTrackbar("hough_dp", "Trackbar", int(self.hough_dp * 10), 30, self.__callback)
+        cv2.createTrackbar("hough_min_dist", "Trackbar", self.hough_min_dist, 200, self.__callback)
+        cv2.createTrackbar("hough_p1", "Trackbar", self.hough_param1, 255, self.__callback)
+        cv2.createTrackbar("hough_p2", "Trackbar", int(self.hough_param2 * 100), 100, self.__callback)
+        cv2.createTrackbar("min_radius", "Trackbar", self.min_radius, 100, self.__callback)
+        cv2.createTrackbar("max_radius", "Trackbar", self.max_radius, 100, self.__callback)
+        cv2.createTrackbar("expected_circles", "Trackbar", self.expected_circles, 10, self.__callback)
+
+        cv2.setTrackbarPos("erode_iter", "Trackbar", self.erode_iter)
+        cv2.setTrackbarPos("dilate_kernel", "Trackbar", self.dilate_kernel_size)
+        cv2.setTrackbarPos("clahe_clip", "Trackbar", int(self.clahe_clip_limit * 10))
+        cv2.setTrackbarPos("clahe_tile", "Trackbar", self.clahe_tile_size)
+        cv2.setTrackbarPos("morph_kernel", "Trackbar", self.morph_kernel_size)
+        cv2.setTrackbarPos("gaussian_kernel", "Trackbar", self.gaussian_kernel_size)
+        cv2.setTrackbarPos("gaussian_sigma", "Trackbar", int(self.gaussian_sigma * 10))
+        cv2.setTrackbarPos("alpha", "Trackbar", int(self.alpha * 10))
+        cv2.setTrackbarPos("threshold", "Trackbar", self.threshold_value)
+        cv2.setTrackbarPos("hough_dp", "Trackbar", int(self.hough_dp * 10))
+        cv2.setTrackbarPos("hough_min_dist", "Trackbar", self.hough_min_dist)
+        cv2.setTrackbarPos("hough_p1", "Trackbar", self.hough_param1)
+        cv2.setTrackbarPos("hough_p2", "Trackbar", int(self.hough_param2 * 100))
+        cv2.setTrackbarPos("min_radius", "Trackbar", self.min_radius)
+        cv2.setTrackbarPos("max_radius", "Trackbar", self.max_radius)
+        cv2.setTrackbarPos("expected_circles", "Trackbar", self.expected_circles)
+
+    async def detect(self, _img) -> tuple[list[tuple[int, int]] | None, cv2.typing.MatLike]:
+        """
+        检测色环
+        ----
+        通过腐蚀膨胀、CLAHE对比度增强、形态学梯度、多次高斯模糊后进行霍夫圆检测
+
+        :param _img: 需要检测的图片
+        :return: 色环中心坐标列表 [(x1,y1), (x2,y2), (x3,y3)]，没识别到返回None，以及处理后的图像
+        """
+        img = _img.copy()
+
+        eroded = cv2.erode(img, None, iterations=self.erode_iter)
+        dilated = cv2.dilate(eroded, self.dilate_kernel, iterations=1)
+
+        gray = cv2.cvtColor(dilated, cv2.COLOR_BGR2GRAY)
+
+        clahe = cv2.createCLAHE(
+            clipLimit=self.clahe_clip_limit,
+            tileGridSize=(self.clahe_tile_size, self.clahe_tile_size)
+        )
+        clahed = clahe.apply(gray)
+
+        gradient = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, self.morph_kernel)
+
+        blurred1 = cv2.GaussianBlur(
+            gradient,
+            (self.gaussian_kernel_size, self.gaussian_kernel_size),
+            self.gaussian_sigma
+        )
+
+        scaled = cv2.convertScaleAbs(blurred1, alpha=self.alpha, beta=0)
+
+        blurred2 = cv2.GaussianBlur(
+            scaled,
+            (self.gaussian_kernel_size, self.gaussian_kernel_size),
+            self.gaussian_sigma
+        )
+
+        _, binary = cv2.threshold(blurred2, self.threshold_value, 255, cv2.THRESH_BINARY)
+
+        blurred3 = cv2.GaussianBlur(
+            binary,
+            (self.gaussian_kernel_size + 2, self.gaussian_kernel_size + 2),
+            self.gaussian_sigma
+        )
+
+        circles = cv2.HoughCircles(
+            blurred3,
+            cv2.HOUGH_GRADIENT_ALT,
+            self.hough_dp,
+            self.hough_min_dist,
+            param1=self.hough_param1,
+            param2=self.hough_param2,
+            minRadius=self.min_radius,
+            maxRadius=self.max_radius
+        )
+
+
+        if circles is not None and len(circles[0]) == self.expected_circles:
+            circles = np.uint16(np.around(circles))
+            circle_list = sorted(circles[0], key=lambda x: x[2], reverse=True)
+
+            result = []
+            for circle in circle_list:
+                x, y, r = circle
+                result.append((int(x), int(y)))
+                cv2.circle(_img, (int(x), int(y)), int(r), (0, 0, 255), 2)
+                cv2.circle(_img, (int(x), int(y)), 2, (255, 0, 0), 2)
+
+            res_img = np.vstack([
+                _img,
+                cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR),
+            ])
+            return result, res_img
+
+        res_img = np.vstack([
+            _img,
+            cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR),
+        ])
+        return None, res_img
+
+    def save_config(self, config_path: str):
+        """
+        保存配置
+        ----
+        Args:
+            config_path (str): 配置文件路径
+        """
+        circle_type = "color_ring"
+
+        try:
+            config = super().load_config(config_path)
+        except:
+            config = {}
+
+        config[circle_type] = {
+            "erode_iter": self.erode_iter,
+            "dilate_kernel_size": self.dilate_kernel_size,
+            "clahe_clip_limit": self.clahe_clip_limit,
+            "clahe_tile_size": self.clahe_tile_size,
+            "morph_kernel_size": self.morph_kernel_size,
+            "gaussian_kernel_size": self.gaussian_kernel_size,
+            "gaussian_sigma": self.gaussian_sigma,
+            "alpha": self.alpha,
+            "threshold_value": self.threshold_value,
+            "hough_dp": self.hough_dp,
+            "hough_min_dist": self.hough_min_dist,
+            "hough_param1": self.hough_param1,
+            "hough_param2": self.hough_param2,
+            "min_radius": self.min_radius,
+            "max_radius": self.max_radius,
+            "expected_circles": self.expected_circles,
+        }
+
+        super().save_config(config_path, config)
+
+    def load_config(self, config: str | dict):
+        """
+        加载配置
+        ----
+        Args:
+            config (str|dict): 配置文件路径或配置字典
+        Returns:
+            str: 错误信息
+        """
+        circle_type = "color_ring"
+
+        config_dict = {}
+        try:
+            config_dict = super().load_config(config)
+            config_dict = config_dict[circle_type]
+        except KeyError:
+            _log.warning(f"配置文件 {config} 中没有 {circle_type} 的配置项")
+            pass
+
+        super().load_param(config_dict, "erode_iter", default=2)
+        super().load_param(config_dict, "dilate_kernel_size", default=7)
+        super().load_param(config_dict, "clahe_clip_limit", default=5.0)
+        super().load_param(config_dict, "clahe_tile_size", default=8)
+        super().load_param(config_dict, "morph_kernel_size", default=5)
+        super().load_param(config_dict, "gaussian_kernel_size", default=7)
+        super().load_param(config_dict, "gaussian_sigma", default=3.0)
+        super().load_param(config_dict, "alpha", default=4.0)
+        super().load_param(config_dict, "threshold_value", default=70)
+        super().load_param(config_dict, "hough_dp", default=1.5)
+        super().load_param(config_dict, "hough_min_dist", default=50)
+        super().load_param(config_dict, "hough_param1", default=100)
+        super().load_param(config_dict, "hough_param2", default=0.95)
+        super().load_param(config_dict, "min_radius", default=15)
+        super().load_param(config_dict, "max_radius", default=50)
+        super().load_param(config_dict, "expected_circles", default=3)

@@ -76,6 +76,7 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
             
             # 处理图像
             else:
+                await detecting_LED.on()
                 # TASK_TABLE[task_sign][0]为函数指针
                 # TASK_TABLE[task_sign][1]为附加参数
                 res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
@@ -83,6 +84,9 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
                     content_need_to_show = res
                 if res is None:
                     continue
+                
+                await ser.new_write(applications.tuple2str(res), head="@", tail="#")
+                await detecting_LED.off()
                 
                 async with img_lock:
                     img_need_to_send = res_img.copy()
@@ -123,13 +127,11 @@ async def board_show():
         if RUN_MODE != prev_mode:
             _log.info(f"运行模式切换: {prev_mode} -> {RUN_MODE}")
             prev_mode = RUN_MODE
-            # 展示LED灯
+            # 展示LED灯 - start_LED在main模式点亮，debug模式熄灭
             if RUN_MODE == "main":
                 await start_LED.on()
-                await detecting_LED.off()
             else:
                 await start_LED.off()
-                await detecting_LED.on()
         async with server_ip_lock:
             show_content += f"Server IP: {server_ip}\n"
             

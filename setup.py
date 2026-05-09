@@ -9,6 +9,15 @@ from loguru import logger
 
 _log = logger.bind(module="setup")
 
+class MockCap:
+    def __init__(self, frame_path: str) -> None:
+        self.frame = cv2.imread(frame_path)
+
+    def read(self) -> tuple[bool, cv2.typing.MatLike|None]:
+        return True, self.frame if self.frame is not None else None
+    
+mockCap = MockCap("test.jpg")
+
 class Setup:
     def __init__(self, cap: cv2.VideoCapture) -> None:
         self.cap: cv2.VideoCapture = cap
@@ -16,7 +25,7 @@ class Setup:
         # 识别器初始化
         self.colorDetector = TraditionalColorDetector()
         self.colorRingDetector = ColorRingDetector()
-        self.CONFIG_PATH = "config.yml"
+        self.CONFIG_PATH = "config.yaml"
 
     async def setupColor(self):
         """
@@ -56,6 +65,7 @@ class Setup:
         """
         self.colorRingDetector.createTrackbar()
         _log.info("已创建色环检测设置窗口")
+        cv2.namedWindow("ColorRing", cv2.WINDOW_NORMAL)
         while True:
             ret, frame = self.cap.read()
             if frame is None:
@@ -117,3 +127,6 @@ def colorring(remote: bool = False, capip: str = "", port: int | None = None, ca
     setup = Setup(cap)
     _log.info("已初始化参数调节器")
     asyncio.run(setup.setupColorRing())
+
+if __name__ == "__main__":
+    cli()

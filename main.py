@@ -123,6 +123,13 @@ async def board_show():
         if RUN_MODE != prev_mode:
             _log.info(f"运行模式切换: {prev_mode} -> {RUN_MODE}")
             prev_mode = RUN_MODE
+            # 展示LED灯
+            if RUN_MODE == "main":
+                await start_LED.on()
+                await detecting_LED.off()
+            else:
+                await start_LED.off()
+                await detecting_LED.on()
         async with server_ip_lock:
             show_content += f"Server IP: {server_ip}\n"
             

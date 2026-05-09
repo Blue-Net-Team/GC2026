@@ -131,17 +131,26 @@ class ColorRingDetector(Detect):
         try:
             self.erode_iter = cv2.getTrackbarPos("erode_iter", "Trackbar")
             self.dilate_kernel_size = cv2.getTrackbarPos("dilate_kernel", "Trackbar")
+            if self.dilate_kernel_size % 2 == 0:
+                self.dilate_kernel_size += 1
+                cv2.setTrackbarPos("dilate_kernel", "Trackbar", self.dilate_kernel_size)
             self.clahe_clip_limit = cv2.getTrackbarPos("clahe_clip", "Trackbar") / 10.0
             self.clahe_tile_size = cv2.getTrackbarPos("clahe_tile", "Trackbar")
             self.morph_kernel_size = cv2.getTrackbarPos("morph_kernel", "Trackbar")
+            if self.morph_kernel_size % 2 == 0:
+                self.morph_kernel_size += 1
+                cv2.setTrackbarPos("morph_kernel", "Trackbar", self.morph_kernel_size)
             self.gaussian_kernel_size = cv2.getTrackbarPos("gaussian_kernel", "Trackbar")
+            if self.gaussian_kernel_size % 2 == 0:
+                self.gaussian_kernel_size += 1
+                cv2.setTrackbarPos("gaussian_kernel", "Trackbar", self.gaussian_kernel_size)
             self.gaussian_sigma = cv2.getTrackbarPos("gaussian_sigma", "Trackbar") / 10.0
             self.alpha = cv2.getTrackbarPos("alpha", "Trackbar") / 10.0
             self.threshold_value = cv2.getTrackbarPos("threshold", "Trackbar")
-            self.hough_dp = cv2.getTrackbarPos("hough_dp", "Trackbar") / 10.0
+            self.hough_dp = max(1, cv2.getTrackbarPos("hough_dp", "Trackbar")) / 10.0
             self.hough_min_dist = cv2.getTrackbarPos("hough_min_dist", "Trackbar")
             self.hough_param1 = cv2.getTrackbarPos("hough_p1", "Trackbar")
-            self.hough_param2 = cv2.getTrackbarPos("hough_p2", "Trackbar") / 100.0
+            self.hough_param2 = max(1, cv2.getTrackbarPos("hough_p2", "Trackbar"))
             self.min_radius = cv2.getTrackbarPos("min_radius", "Trackbar")
             self.max_radius = cv2.getTrackbarPos("max_radius", "Trackbar")
             self.expected_circles = cv2.getTrackbarPos("expected_circles", "Trackbar")
@@ -152,7 +161,7 @@ class ColorRingDetector(Detect):
         cv2.namedWindow("Trackbar", cv2.WINDOW_NORMAL)
         cv2.createTrackbar("erode_iter", "Trackbar", self.erode_iter, 10, self.__callback)
         cv2.createTrackbar("dilate_kernel", "Trackbar", self.dilate_kernel_size, 15, self.__callback)
-        cv2.createTrackbar("clahe_clip", "Trackbar", int(self.clahe_clip_limit * 10), 50, self.__callback)
+        cv2.createTrackbar("clahe_clip", "Trackbar", int(self.clahe_clip_limit * 10), 100, self.__callback)
         cv2.createTrackbar("clahe_tile", "Trackbar", self.clahe_tile_size, 16, self.__callback)
         cv2.createTrackbar("morph_kernel", "Trackbar", self.morph_kernel_size, 15, self.__callback)
         cv2.createTrackbar("gaussian_kernel", "Trackbar", self.gaussian_kernel_size, 15, self.__callback)
@@ -162,9 +171,9 @@ class ColorRingDetector(Detect):
         cv2.createTrackbar("hough_dp", "Trackbar", int(self.hough_dp * 10), 30, self.__callback)
         cv2.createTrackbar("hough_min_dist", "Trackbar", self.hough_min_dist, 200, self.__callback)
         cv2.createTrackbar("hough_p1", "Trackbar", self.hough_param1, 255, self.__callback)
-        cv2.createTrackbar("hough_p2", "Trackbar", int(self.hough_param2 * 100), 100, self.__callback)
-        cv2.createTrackbar("min_radius", "Trackbar", self.min_radius, 100, self.__callback)
-        cv2.createTrackbar("max_radius", "Trackbar", self.max_radius, 100, self.__callback)
+        cv2.createTrackbar("hough_p2", "Trackbar", int(self.hough_param2), 255, self.__callback)
+        cv2.createTrackbar("min_radius", "Trackbar", self.min_radius, 900, self.__callback)
+        cv2.createTrackbar("max_radius", "Trackbar", self.max_radius, 900, self.__callback)
         cv2.createTrackbar("expected_circles", "Trackbar", self.expected_circles, 10, self.__callback)
 
         cv2.setTrackbarPos("erode_iter", "Trackbar", self.erode_iter)
@@ -179,7 +188,7 @@ class ColorRingDetector(Detect):
         cv2.setTrackbarPos("hough_dp", "Trackbar", int(self.hough_dp * 10))
         cv2.setTrackbarPos("hough_min_dist", "Trackbar", self.hough_min_dist)
         cv2.setTrackbarPos("hough_p1", "Trackbar", self.hough_param1)
-        cv2.setTrackbarPos("hough_p2", "Trackbar", int(self.hough_param2 * 100))
+        cv2.setTrackbarPos("hough_p2", "Trackbar", int(self.hough_param2))
         cv2.setTrackbarPos("min_radius", "Trackbar", self.min_radius)
         cv2.setTrackbarPos("max_radius", "Trackbar", self.max_radius)
         cv2.setTrackbarPos("expected_circles", "Trackbar", self.expected_circles)
@@ -232,7 +241,7 @@ class ColorRingDetector(Detect):
 
         circles = cv2.HoughCircles(
             blurred3,
-            cv2.HOUGH_GRADIENT_ALT,
+            cv2.HOUGH_GRADIENT,
             self.hough_dp,
             self.hough_min_dist,
             param1=self.hough_param1,
@@ -242,7 +251,7 @@ class ColorRingDetector(Detect):
         )
 
 
-        if circles is not None and len(circles[0]) == self.expected_circles:
+        if circles is not None:
             circles = np.uint16(np.around(circles))
             circle_list = sorted(circles[0], key=lambda x: x[2], reverse=True)
 
@@ -261,7 +270,7 @@ class ColorRingDetector(Detect):
 
         res_img = np.vstack([
             _img,
-            cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR),
+            cv2.cvtColor(blurred3, cv2.COLOR_GRAY2BGR),
         ])
         return None, res_img
 

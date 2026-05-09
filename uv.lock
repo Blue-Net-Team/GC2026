@@ -77,6 +77,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+board = [
+    { name = "python-periphery" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -95,9 +98,10 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1.3.0" },
+    { name = "python-periphery", marker = "extra == 'board'", specifier = ">=2.4.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
-provides-extras = ["test"]
+provides-extras = ["test", "board"]
 
 [[package]]
 name = "iniconfig"
@@ -364,6 +368,15 @@ dependencies = [
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", hash = "sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", hash = "sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5" },
+]
+
+[[package]]
+name = "python-periphery"
+version = "2.4.1"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/df/f1/1a986ad2bb696033168db2121151e5ff90df033af780ffca47c8bb559f29/python-periphery-2.4.1.tar.gz", hash = "sha256:61d461d736982a6f766e878720ab10a68151e2e8c1086600d9389ac47e40e88a" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/0a/b8/423ab1d47cb61efc54461107177abb69a1390ac84885eff3ba83a00fd8f4/python_periphery-2.4.1-py2.py3-none-any.whl", hash = "sha256:8ab14002e7520966fae7a3b9c56d98ddaf4c1b78c5f5b2c7153cedc3846fd56a" },
 ]
 
 [[package]]

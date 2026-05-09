@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/media/sdcard/code/Engineering-innovation-competition-vision/run_auto/run_before_use_GPIO.sh
+ExecStart=/userdata/code/GC2026/run_auto/run_before_use_GPIO.sh
 RemainAfterExit=yes
 User=root
 

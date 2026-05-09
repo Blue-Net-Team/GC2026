@@ -3,7 +3,7 @@ Description=Change Board LED
 After=network.target
 
 [Service]
-ExecStart=/media/sdcard/code/Engineering-innovation-competition-vision/run_auto/change_board_led.sh
+ExecStart=/userdata/code/GC2026/run_auto/change_board_led.sh
 Type=simple
 RemainAfterExit=true
 User=root

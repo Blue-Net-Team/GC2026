@@ -4,12 +4,11 @@ from ImgTrans import ReceiveImgUDP
 import click
 
 from detector import ColorRingDetector, TraditionalColorDetector
-from utils import Cap
 from loguru import logger
 
 _log = logger.bind(module="setup")
 
-class MockCap:
+class MockCap(cv2.VideoCapture):
     def __init__(self, frame_path: str) -> None:
         self.frame = cv2.imread(frame_path)
 
@@ -121,7 +120,8 @@ def colorring(remote: bool = False, capip: str = "", port: int | None = None, ca
         cap = ReceiveImgUDP(capip, port, "169.254.213.183")
         _log.info("已创建远程摄像头")
     else:
-        cap = cv2.VideoCapture(capid)
+        # cap = cv2.VideoCapture(capid)
+        cap = mockCap
         _log.info(f"已创建本地摄像头 {capid}")
 
     setup = Setup(cap)

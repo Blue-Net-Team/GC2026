@@ -29,11 +29,11 @@ _log = logger.bind(module="img_trans")
 
 async def main_linux():
     """Linux平台的主函数"""
-    stream = await SendImgUDP.create("wlan0", 4444)
+    stream = await SendImgUDP.create("eth0", 4444)
     cap = Cap()
     
     # 等待连接
-    _log.info(f"等待连接... 当前ip: {stream.host_ip}")
+    _log.info(f"等待连接... 当前ip: {stream.host}")
     while True:
         if await stream.connecting():
             _log.info(f"连接成功，对端ip: {stream.clients_ip}")
@@ -54,7 +54,7 @@ async def main_linux():
 
 async def main_windows():
     """Windows平台的主函数"""
-    cap = LoadWebCam("169.254.133.100", 4444, "169.254.102.252")
+    cap = LoadWebCam("192.168.123.6", 4444, "192.168.123.2")
     cv2.namedWindow("img", cv2.WINDOW_NORMAL)
     for img in cap:
         if img is None:

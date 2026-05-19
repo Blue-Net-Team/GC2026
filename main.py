@@ -36,7 +36,7 @@ server_ip_lock = asyncio.Lock()
 
 SERVER_INTERFACE = "eth0"
 SERVER_PORT = 8080
-SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_PORT = "/dev/ttyS3"
 
 if platform.system() == "Linux":
     CAP = Cap() # 初始化摄像头（Linux环境）
@@ -83,9 +83,11 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
                 async with content_lock:        # 保护内容更新
                     content_need_to_show = res
                 if res is None:
-                    continue
+                    _log.warning("未检测到结果，返回FFFFFFFF")
+                    await ser.new_write("FFFFFFFF", head="@", tail="#")
+                else:
+                    await ser.new_write(applications.tuple2str(res), head="@", tail="#")
                 
-                await ser.new_write(applications.tuple2str(res), head="@", tail="#")
                 await detecting_LED.off()
                 
                 async with img_lock:
@@ -165,7 +167,6 @@ async def img_trans():
         # 发送完成后，将待传输的图像设置为None
         async with img_lock:
             img_need_to_send = None
-        await asyncio.sleep(0.01)  # 添加微小延迟，避免空转
 
 async def run():
     await asyncio.gather(main(CAP, SERIAL_PORT), board_show(), img_trans())

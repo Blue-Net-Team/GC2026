@@ -62,5 +62,15 @@ class Detect(ConfigLoader):
             diff = cv2.absdiff(img, blurred)
             mask = diff > threshold
             sharpened = np.where(mask, sharpened, img)
-        
+
         return sharpened
+
+    def __str__(self):
+        """
+        返回检测器当前配置参数的字符串表示
+        """
+        attrs = {}
+        for key in dir(self):
+            if not key.startswith("_") and not callable(getattr(self, key)):
+                attrs[key] = getattr(self, key)
+        return f"{self.__class__.__name__}({attrs})"

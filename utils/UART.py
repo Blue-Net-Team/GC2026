@@ -53,6 +53,7 @@ Usart类
 from typing import Union, overload
 from utils.typingCheck import check_args
 import serial
+import asyncio
 
 
 class Uart(serial.Serial):
@@ -75,6 +76,14 @@ class Uart(serial.Serial):
         super().__init__(port=port, baudrate=baudrate, timeout=timeout)
         self.read_flag = True
 
+    def cancel_read(self):
+        """取消正在进行的读取操作，打断阻塞的 select"""
+        self.read_flag = False
+        if hasattr(self, '_cancel_read'):
+            try:
+                self._cancel_read()
+            except Exception:
+                pass
 
     async def new_read(self, head: str, tail: str = "\n") -> str|None:
         """
@@ -88,10 +97,15 @@ class Uart(serial.Serial):
         """
         if self.is_open:
             self.clear()
+            self.read_flag = True
             HEAD, TAIL = head.encode("ascii"), tail.encode("ascii")
             data = b""
+            loop = asyncio.get_running_loop()
             while self.read_flag:
-                byte = super().read(1)
+                try:
+                    byte = await loop.run_in_executor(None, super().read, 1)
+                except serial.SerialException:
+                    return None
                 if not byte:
                     return None
                 data += byte
@@ -101,7 +115,10 @@ class Uart(serial.Serial):
             # -----读到包头-----
             data = b""
             while self.read_flag:
-                byte = super().read(1)
+                try:
+                    byte = await loop.run_in_executor(None, super().read, 1)
+                except serial.SerialException:
+                    return None
                 if not byte:
                     continue
                 data += byte

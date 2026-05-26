@@ -56,93 +56,102 @@ TASK_TABLE = {
 
 async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
     global img_need_to_send, content_need_to_show
-    
+
     ser = Uart(ser_port)
-    
-    while True:
-        # 获取当前运行模式
-        async with mode_lock:
-            run_mode = RUN_MODE
-        if run_mode == "main":
-            # 读取串口任务
-            task_sign = await ser.new_read(head="@", tail="#")
-            if task_sign is None:
-                _log.warning("未收到任务")
-                continue
-            _log.info(f"收到任务: {task_sign}")
-            
-            ret, img = cap.read()
-            if not ret:
-                _log.warning("无法读取摄像头图像")
-                break
-            
-            # 处理图像
-            else:
-                await detecting_LED.on()
-                # TASK_TABLE[task_sign][0]为函数指针
-                # TASK_TABLE[task_sign][1]为附加参数
-                res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
-                async with content_lock:        # 保护内容更新
-                    content_need_to_show = res
-                if res is None:
-                    _log.warning("未检测到结果，返回FFFFFFFF")
-                    await ser.new_write("FFFFFFFF", head="@", tail="#")
-                else:
-                    await ser.new_write(applications.tuple2str(res), head="@", tail="#")
-                
-                await detecting_LED.off()
-                
-                async with img_lock:
-                    img_need_to_send = res_img.copy()
-                    
-            # 仅在桌面环境下显示图像
-            if is_desktop_environment():
-                cv2.imshow("Frame", img)
-                cv2.imshow("Res Frame", res_img)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
+
+    try:
+        while True:
+            # 获取当前运行模式
+            async with mode_lock:
+                run_mode = RUN_MODE
+            if run_mode == "main":
+                # 读取串口任务
+                task_sign = await ser.new_read(head="@", tail="#")
+                if task_sign is None:
+                    _log.warning("未收到任务")
+                    continue
+                _log.info(f"收到任务: {task_sign}")
+
+                ret, img = cap.read()
+                if not ret:
+                    _log.warning("无法读取摄像头图像")
                     break
-        else:
-            ret, img = cap.read()
-            if not ret:
-                _log.warning("无法读取摄像头图像")
-                break
-            # 复制图像到待发送图像
-            async with img_lock:
-                img_need_to_send = img.copy()
-    cap.release()
-    if is_desktop_environment():
-        cv2.destroyAllWindows()
+
+                # 处理图像
+                else:
+                    await detecting_LED.on()
+                    # TASK_TABLE[task_sign][0]为函数指针
+                    # TASK_TABLE[task_sign][1]为附加参数
+                    res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
+                    async with content_lock:        # 保护内容更新
+                        content_need_to_show = res
+                    if res is None:
+                        _log.warning("未检测到结果，返回FFFFFFFF")
+                        await ser.new_write("FFFFFFFF", head="@", tail="#")
+                    else:
+                        await ser.new_write(applications.tuple2str(res), head="@", tail="#")
+
+                    await detecting_LED.off()
+
+                    async with img_lock:
+                        img_need_to_send = res_img.copy()
+
+                # 仅在桌面环境下显示图像
+                if is_desktop_environment():
+                    cv2.imshow("Frame", img)
+                    cv2.imshow("Res Frame", res_img)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+            else:
+                ret, img = cap.read()
+                if not ret:
+                    _log.warning("无法读取摄像头图像")
+                    break
+                # 复制图像到待发送图像
+                async with img_lock:
+                    img_need_to_send = img.copy()
+    except asyncio.CancelledError:
+        _log.info("main 任务被取消")
+        raise
+    finally:
+        cap.release()
+        if is_desktop_environment():
+            cv2.destroyAllWindows()
 
     
 async def board_show():
     global RUN_MODE, content_need_to_show
     prev_mode = None
-    while True:
-        show_content = ""
-        switch_status = await switch.read_status()
-        if switch_status:  # 图传模式（debug）
-            async with mode_lock:
-                RUN_MODE = "debug"
-            show_content = "Debug\n"
-        else:
-            async with mode_lock:
-                RUN_MODE = "main"
-            show_content = "Main\n"
-        if RUN_MODE != prev_mode:
-            _log.info(f"运行模式切换: {prev_mode} -> {RUN_MODE}")
-            prev_mode = RUN_MODE
-            # 展示LED灯 - start_LED在main模式点亮，debug模式熄灭
-            if RUN_MODE == "main":
-                await start_LED.on()
+    try:
+        while True:
+            show_content = ""
+            switch_status = await switch.read_status()
+            if switch_status:  # 图传模式（debug）
+                async with mode_lock:
+                    RUN_MODE = "debug"
+                show_content = "Debug\n"
             else:
-                await start_LED.off()
-        async with server_ip_lock:
-            show_content += f"Server IP: {server_ip}\n"
-            
-        async with content_lock:
-            show_content += content_need_to_show
-        await oled.text(show_content, (1,1))
-        await oled.display()
+                async with mode_lock:
+                    RUN_MODE = "main"
+                show_content = "Main\n"
+            if RUN_MODE != prev_mode:
+                _log.info(f"运行模式切换: {prev_mode} -> {RUN_MODE}")
+                prev_mode = RUN_MODE
+                # 展示LED灯 - start_LED在main模式点亮，debug模式熄灭
+                if RUN_MODE == "main":
+                    await start_LED.on()
+                else:
+                    await start_LED.off()
+            async with server_ip_lock:
+                show_content += f"Server IP: {server_ip}\n"
+                
+            async with content_lock:
+                show_content += content_need_to_show
+            await oled.text(show_content, (1,1))
+            await oled.display()
+    except asyncio.CancelledError:
+        _log.info("board_show 任务被取消")
+        raise
             
     
 async def img_trans():
@@ -155,22 +164,27 @@ async def img_trans():
     
     await sendImgUDP.connecting()
     
-    while True:
-        # 使用锁保护读取操作
-        async with img_lock:
-            current_img = img_need_to_send
-        
-        if current_img is None:
-            await asyncio.sleep(0.01)  # 添加微小延迟，避免空转
-            continue
-        
-        # 发送图像
-        await sendImgUDP.send(current_img)
-        # 发送完成后，将待传输的图像设置为None
-        async with img_lock:
-            img_need_to_send = None
+    try:
+        while True:
+            # 使用锁保护读取操作
+            async with img_lock:
+                current_img = img_need_to_send
+            
+            if current_img is None:
+                await asyncio.sleep(0.01)  # 添加微小延迟，避免空转
+                continue
+            
+            # 发送图像
+            await sendImgUDP.send(current_img)
+            # 发送完成后，将待传输的图像设置为None
+            async with img_lock:
+                img_need_to_send = None
+    except asyncio.CancelledError:
+        _log.info("img_trans 任务被取消")
+        raise
 
 async def run():
+    ser = None
     tasks = [
         asyncio.create_task(main(CAP, SERIAL_PORT)),
         asyncio.create_task(board_show()),
@@ -184,10 +198,11 @@ async def run():
         for task in tasks:
             if not task.done():
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        # 给任务一点时间响应取消
+        await asyncio.sleep(0.1)
+        # 如果 main 任务还在阻塞在串口读取，这里无法直接打断 run_in_executor
+        # 但 run_in_executor 的线程会在 read 超时后检查 read_flag 并退出
+
 
 def cli():
     loop = asyncio.new_event_loop()

@@ -103,7 +103,8 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
             ret, img = cap.read()
             if not ret:
                 _log.warning("无法读取摄像头图像")
-                break
+                await asyncio.sleep(0.1)
+                continue
             # 复制图像到待发送图像
             async with img_lock:
                 img_need_to_send = img.copy()

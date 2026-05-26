@@ -120,8 +120,8 @@ def colorring(remote: bool = False, capip: str = "", port: int | None = None, ca
         cap = ReceiveImgUDP(capip, port, "169.254.213.183")
         _log.info("已创建远程摄像头")
     else:
-        # cap = cv2.VideoCapture(capid)
-        cap = mockCap
+        cap = cv2.VideoCapture(capid)
+        # cap = mockCap
         _log.info(f"已创建本地摄像头 {capid}")
 
     setup = Setup(cap)

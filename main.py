@@ -140,6 +140,7 @@ async def board_show():
 
         async with content_lock:
             show_content += content_need_to_show
+        await oled.clear()
         await oled.text(show_content, (1,1))
         await oled.display()
         await asyncio.sleep(0.05)

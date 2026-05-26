@@ -16,11 +16,11 @@ class Applications:
         self.colorRingDetector: ColorRingDetector = ColorRingDetector()
         
         # 颜色检测器配置
-        config_log1 = self.colorDetector.load_config(config_path)
-        _log.info(f"颜色检测器配置: {config_log1}")
+        self.colorDetector.load_config(config_path)
+        _log.info(f"颜色检测器配置: {self.colorDetector}")
         # 圆检测器配置
-        config_log2 = self.colorRingDetector.load_config(config_path)
-        _log.info(f"圆检测器配置: {config_log2}")
+        self.colorRingDetector.load_config(config_path)
+        _log.info(f"圆检测器配置: {self.colorRingDetector}")
         
     async def detect_material(self, img: cv2.typing.MatLike, color_label: str):
         """

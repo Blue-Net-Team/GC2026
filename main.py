@@ -172,7 +172,10 @@ async def run():
     await asyncio.gather(main(CAP, SERIAL_PORT), board_show(), img_trans())
 
 def cli():
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        _log.info("程序已退出")
 
 if __name__ == "__main__":
     cli()

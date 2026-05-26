@@ -1,5 +1,7 @@
 import asyncio
 import cv2
+import signal
+import sys
 from loguru import logger
 from ImgTrans import SendImgUDP
 from utils import Cap, Uart, is_desktop_environment
@@ -169,12 +171,44 @@ async def img_trans():
             img_need_to_send = None
 
 async def run():
-    await asyncio.gather(main(CAP, SERIAL_PORT), board_show(), img_trans())
+    tasks = [
+        asyncio.create_task(main(CAP, SERIAL_PORT)),
+        asyncio.create_task(board_show()),
+        asyncio.create_task(img_trans()),
+    ]
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 def cli():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    main_task = loop.create_task(run())
+
+    def shutdown(sig):
+        _log.info("收到退出信号，正在关闭...")
+        main_task.cancel()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown, sig)
+
     try:
-        asyncio.run(run())
-    except KeyboardInterrupt:
+        loop.run_until_complete(main_task)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
         _log.info("程序已退出")
 
 if __name__ == "__main__":

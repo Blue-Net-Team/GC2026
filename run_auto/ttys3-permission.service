@@ -1,0 +1,11 @@
+[Unit]
+Description=Set ttyS3 Permission
+After=dev-ttyS3.device
+
+[Service]
+Type=oneshot
+ExecStart=/bin/chmod 666 /dev/ttyS3
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

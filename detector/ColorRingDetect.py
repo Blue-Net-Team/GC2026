@@ -102,22 +102,22 @@ class ColorRingDetector(Detect):
         - expected_circles (int): 期望检测的圆数量，默认3
     """
 
-    erode_iter: int = 2  # 腐蚀操作迭代次数
-    dilate_kernel_size: int = 7  # 膨胀操作核大小
-    clahe_clip_limit: float = 5.0  # CLAHE对比度限制参数
+    erode_iter: int = 1  # 腐蚀操作迭代次数
+    dilate_kernel_size: int = 5  # 膨胀操作核大小
+    clahe_clip_limit: float = 2.0  # CLAHE对比度限制参数
     clahe_tile_size: int = 8  # CLAHE分块大小
-    morph_kernel_size: int = 5  # 形态学操作核大小
-    gaussian_kernel_size: int = 7  # 高斯模糊核大小
-    gaussian_sigma: float = 3.0  # 高斯模糊标准差
-    alpha: float = 4.0  # 对比度增强系数
-    threshold_value: int = 70  # 二值化阈值
+    morph_kernel_size: int = 3  # 形态学操作核大小
+    gaussian_kernel_size: int = 5  # 高斯模糊核大小
+    gaussian_sigma: float = 1.5  # 高斯模糊标准差
+    alpha: float = 2.0  # 对比度增强系数
+    threshold_value: int = 120  # 二值化阈值
     hough_dp: float = 1.5  # 霍夫圆检测累加器分辨率比
-    hough_min_dist: int = 50  # 霍夫圆检测圆心最小间距
+    hough_min_dist: int = 100  # 霍夫圆检测圆心最小间距
     hough_param1: int = 100  # 霍夫圆检测Canny边缘检测高阈值
-    hough_param2: float = 0.95  # 霍夫圆检测累加器阈值
-    min_radius: int = 15  # 检测圆最小半径
-    max_radius: int = 50  # 检测圆最大半径
-    expected_circles: int = 3  # 期望检测的圆数量
+    hough_param2: float = 100.0  # 霍夫圆检测累加器阈值
+    min_radius: int = 80  # 检测圆最小半径
+    max_radius: int = 280  # 检测圆最大半径
+    expected_circles: int = 5  # 期望检测的圆数量
 
     @property
     def dilate_kernel(self):

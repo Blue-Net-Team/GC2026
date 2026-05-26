@@ -85,7 +85,40 @@ class Uart(serial.Serial):
             except Exception:
                 pass
 
-    async def new_read(self, head: str, tail: str = "\n") -> str|None:
+    def _sync_read(self, head: str, tail: str = "\n") -> str | None:
+        """同步版本的整包读取，在线程池中执行"""
+        if not self.is_open:
+            return None
+        self.clear()
+        self.read_flag = True
+        HEAD, TAIL = head.encode("ascii"), tail.encode("ascii")
+        data = b""
+        while self.read_flag:
+            try:
+                byte = super().read(1)
+            except serial.SerialException:
+                return None
+            if not byte:
+                return None
+            data += byte
+            if data.endswith(HEAD):
+                break
+
+        # -----读到包头-----
+        data = b""
+        while self.read_flag:
+            try:
+                byte = super().read(1)
+            except serial.SerialException:
+                return None
+            if not byte:
+                continue
+            data += byte
+            if data.endswith(TAIL):
+                return data[: -len(TAIL)].decode("ascii")
+        return None
+
+    async def new_read(self, head: str, tail: str = "\n") -> str | None:
         """
         读取数据
         ----
@@ -95,38 +128,8 @@ class Uart(serial.Serial):
         Returns:
             result (str): 去掉包尾的数据字符串
         """
-        if self.is_open:
-            self.clear()
-            self.read_flag = True
-            HEAD, TAIL = head.encode("ascii"), tail.encode("ascii")
-            data = b""
-            loop = asyncio.get_running_loop()
-            while self.read_flag:
-                try:
-                    byte = await loop.run_in_executor(None, super().read, 1)
-                except serial.SerialException:
-                    return None
-                if not byte:
-                    return None
-                data += byte
-                if data.endswith(HEAD):
-                    break
-
-            # -----读到包头-----
-            data = b""
-            while self.read_flag:
-                try:
-                    byte = await loop.run_in_executor(None, super().read, 1)
-                except serial.SerialException:
-                    return None
-                if not byte:
-                    continue
-                data += byte
-                if data.endswith(TAIL):
-                    return data[: -len(TAIL)].decode("ascii")  # 返回去掉包尾的数据
-            return None
-        else:
-            return None
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._sync_read, head, tail)
 
     @overload
     async def new_write(self, data: str, head: str = "", tail: str = "") -> None: ...

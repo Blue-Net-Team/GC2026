@@ -46,6 +46,7 @@ class SendImg(object):
     def interface(self, value:str):
         self._interface = value
         self._host = self.get_ip_address(value)
+        self.host_ip = self._host
 
     def __init__(self, interface:str, port:int=4444):
         """初始化

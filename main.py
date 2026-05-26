@@ -141,6 +141,7 @@ async def board_show():
             show_content += content_need_to_show
         await oled.text(show_content, (1,1))
         await oled.display()
+        await asyncio.sleep(0.05)
 
 
 async def img_trans():

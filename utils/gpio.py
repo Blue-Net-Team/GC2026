@@ -14,6 +14,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import asyncio
 import jieba
 from loguru import logger
 jieba.lcut("初始化分词器")
@@ -256,14 +257,8 @@ try:
             except:
                 self.Opened = False
 
-        async def text(self, data: str, position: tuple[int, int]):
-            """
-            在画面中绘制文字，并自动换行（支持换行符）
-            ----
-            Args:
-                data(str):需要绘制的文字数据（可以包含换行符）
-                position(tuple[int,int]):绘制文字的起始位置
-            """
+        def _sync_text(self, data: str, position: tuple[int, int]):
+            """同步版本：在画面中绘制文字，并自动换行（支持换行符）"""
             if not self.Opened:
                 return
 
@@ -305,9 +300,20 @@ try:
                     line_height = ascent + descent + 2
                     y += line_height  # 移动到下一行
 
-        async def display(self,reverse:bool = False):
+        async def text(self, data: str, position: tuple[int, int]):
             """
-            在屏幕上显示画面
+            在画面中绘制文字，并自动换行（支持换行符）
+            ----
+            Args:
+                data(str):需要绘制的文字数据（可以包含换行符）
+                position(tuple[int,int]):绘制文字的起始位置
+            """
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._sync_text, data, position)
+
+        def _sync_display(self, reverse: bool = False):
+            """
+            同步版本：在屏幕上显示画面
             ----
             Args:
                 reverse(bool):是否旋转180度
@@ -316,6 +322,16 @@ try:
                 if reverse:
                     self.image = self.image.rotate(180)
                 self.device.display(self.image)
+
+        async def display(self, reverse: bool = False):
+            """
+            在屏幕上显示画面
+            ----
+            Args:
+                reverse(bool):是否旋转180度
+            """
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._sync_display, reverse)
 
         async def clear(self):
             """清空画面"""

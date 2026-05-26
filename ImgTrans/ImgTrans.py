@@ -40,6 +40,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ----
 服务端不能主动向客户端发送数据，只能等待客户端连接后发送数据
 """
+import asyncio
 import io
 import socket
 import struct
@@ -271,21 +272,23 @@ class SendImgUDP(SendImg):
         await instance.openSocket()
         return instance
 
-    async def openSocket(self):
-        """
-        打开udp套接字
-        """
+    def _sync_open_socket(self):
+        """同步版本：打开udp套接字"""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.server_socket.bind((self.host, self.port))
 
-    async def connecting(self):
+    async def openSocket(self):
         """
-        等待udp客户端连接，如果不等待，回向配置中的ip列表发送数据
+        打开udp套接字
         """
+        self._sync_open_socket()
+
+    def _sync_connecting(self):
+        """同步版本：等待udp客户端连接"""
         try:
             if self.server_socket is None:
-                await self.openSocket()
+                self._sync_open_socket()
             self.server_socket.settimeout(0.5)
             data, addr = self.server_socket.recvfrom(self.BUFFER_SIZE)
             if addr != (self.host, self.port) and data == b'connect':  # 避免回环请求
@@ -297,12 +300,20 @@ class SendImgUDP(SendImg):
         except socket.timeout:
             return False
         except OSError:
-            await self.openSocket()
+            self._sync_open_socket()
         except Exception as e:
             _log.error(str(e))
         return False
 
-    async def send(self, _img: cv2.typing.MatLike) -> bool:
+    async def connecting(self):
+        """
+        等待udp客户端连接，如果不等待，回向配置中的ip列表发送数据
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._sync_connecting)
+
+    def _sync_send(self, _img: cv2.typing.MatLike) -> bool:
+        """同步版本：发送图像数据"""
         _, img_encoded = cv2.imencode('.jpg', _img)
         img_data = img_encoded.tobytes()
 
@@ -317,6 +328,10 @@ class SendImgUDP(SendImg):
             self.server_socket.sendto(packet, (ip, self.port))
             _log.info(f"已发送数据到 {ip}，端口: {self.port}")
         return True
+
+    async def send(self, _img: cv2.typing.MatLike) -> bool:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._sync_send, _img)
 
     def close(self):
         self.server_socket.close()

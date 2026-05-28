@@ -107,6 +107,8 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
             # 复制图像到待发送图像
             async with img_lock:
                 img_need_to_send = img.copy()
+            # 控制 debug 模式帧率，避免高频空转抢占事件循环
+            await asyncio.sleep(0.03)
     cap.release()
     if is_desktop_environment():
         cv2.destroyAllWindows()
@@ -153,7 +155,11 @@ async def img_trans():
     async with server_ip_lock:
         server_ip = sendImgUDP.host_ip
 
-    await sendImgUDP.connecting()
+    connected = await sendImgUDP.connecting()
+    if connected:
+        _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
+    else:
+        _log.warning("UDP 未等到客户端连接，将继续发送（如有配置IP）")
 
     while True:
         # 使用锁保护读取操作
@@ -165,10 +171,17 @@ async def img_trans():
             continue
 
         # 发送图像
-        await sendImgUDP.send(current_img)
+        try:
+            await sendImgUDP.send(current_img)
+        except Exception as e:
+            _log.error(f"图像发送失败: {e}")
+
         # 发送完成后，将待传输的图像设置为None
         async with img_lock:
             img_need_to_send = None
+
+        # 控制发送频率，避免连续高频发送抢占事件循环
+        await asyncio.sleep(0.02)
 
 async def run():
     await asyncio.gather(main(CAP, SERIAL_PORT), board_show(), img_trans())

@@ -314,6 +314,9 @@ class SendImgUDP(SendImg):
 
     def _sync_send(self, _img: cv2.typing.MatLike) -> bool:
         """同步版本：发送图像数据"""
+        if not self.clients_ip:
+            return False
+
         _, img_encoded = cv2.imencode('.jpg', _img)
         img_data = img_encoded.tobytes()
 

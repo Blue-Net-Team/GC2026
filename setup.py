@@ -1,4 +1,5 @@
 import asyncio
+import os
 import cv2
 from ImgTrans import ReceiveImgUDP
 import click
@@ -20,11 +21,17 @@ mockCap = MockCap("test.jpg")
 class Setup:
     def __init__(self, cap: cv2.VideoCapture) -> None:
         self.cap: cv2.VideoCapture = cap
-        
+
         # 识别器初始化
         self.colorDetector = TraditionalColorDetector()
         self.colorRingDetector = ColorRingDetector()
         self.CONFIG_PATH = "config.yaml"
+
+        # 加载已有配置
+        if os.path.exists(self.CONFIG_PATH):
+            self.colorDetector.load_config(self.CONFIG_PATH)
+            self.colorRingDetector.load_config(self.CONFIG_PATH)
+            _log.info(f"已从 {self.CONFIG_PATH} 加载配置")
 
     async def setupColor(self):
         """

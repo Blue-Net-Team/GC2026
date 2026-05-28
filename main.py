@@ -155,11 +155,12 @@ async def img_trans():
     async with server_ip_lock:
         server_ip = sendImgUDP.host_ip
 
-    connected = await sendImgUDP.connecting()
-    if connected:
-        _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
-    else:
-        _log.warning("UDP 未等到客户端连接，将继续发送（如有配置IP）")
+    connected = False
+    while not connected:
+        connected = await sendImgUDP.connecting()
+        if not connected:
+            await asyncio.sleep(0.1)
+    _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
 
     while True:
         # 使用锁保护读取操作

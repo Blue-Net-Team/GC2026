@@ -57,8 +57,10 @@ class Applications:
             _log.warning("未检测到物料中心点")
             return None, draw_img
 
-        _log.info(f"检测到物料中心点: {center}")
-        return (center["m10"] / center["m00"], center["m01"] / center["m00"]), draw_img
+        cx = center["m10"] / center["m00"]
+        cy = center["m01"] / center["m00"]
+        _log.info(f"检测到物料中心点: ({cx:.1f}, {cy:.1f})")
+        return (cx, cy), draw_img
         
     async def detect_circle(self, img: cv2.typing.MatLike, label=None):
         """

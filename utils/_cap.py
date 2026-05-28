@@ -25,7 +25,7 @@ class Cap(cv2.VideoCapture):
     def getCapIndex():
         try:
             result = subprocess.run(['v4l2-ctl', '--list-devices'], capture_output=True, text=True, check=True)
-            pattern = r"LRCP 1080P-60.*?\n\s*(/dev/video\d+)\n\s*(/dev/video\d+)"
+            pattern = r"icspring camer.*?\n\s*(/dev/video\d+)\n\s*(/dev/video\d+)"
             match = re.search(pattern, result.stdout, re.DOTALL)
             if match:
                 video1 = match.group(1)

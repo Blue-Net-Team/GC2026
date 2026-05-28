@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 from detector import TraditionalColorDetector, ColorRingDetector
 from loguru import logger
@@ -42,14 +43,20 @@ class Applications:
         # 色块中心点
         center = cv2.moments(max_contour)
         
-        # 绘制轮廓
-        draw_img = cv2.cvtColor(filtered_img, cv2.COLOR_GRAY2BGR)
-        cv2.drawContours(draw_img, [max_contour], -1, (0, 255, 0), 2)
-        
+        # 在原图上绘制外接矩形框
+        x, y, w, h = cv2.boundingRect(max_contour)
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # 上下拼接：上侧原图（带框），下侧二值化图
+        draw_img = np.vstack([
+            img,
+            cv2.cvtColor(filtered_img, cv2.COLOR_GRAY2BGR),
+        ])
+
         if center["m00"] == 0:
             _log.warning("未检测到物料中心点")
             return None, draw_img
-        
+
         _log.info(f"检测到物料中心点: {center}")
         return (center["m10"] / center["m00"], center["m01"] / center["m00"]), draw_img
         

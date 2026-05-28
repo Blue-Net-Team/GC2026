@@ -66,13 +66,16 @@ class Applications:
             _log.warning("未检测到圆位置")
             return None, res_img
     
-    def tuple2str(self, _tuple: tuple) -> str:
+    def tuple2str(self, _tuple: tuple|None) -> str:
         """
         元组转换为特定格式的字符串
         格式规则：
         + -> 1, - -> 0，后续数字保持正常，3位数补满
         示例：(12, -115) -> 10120115
         """
+        if _tuple is None:
+            return 'FFFFFFFF'
+        
         x, y = _tuple
         
         # 转换x坐标

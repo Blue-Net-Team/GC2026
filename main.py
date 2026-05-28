@@ -80,13 +80,12 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
                 # TASK_TABLE[task_sign][0]为函数指针
                 # TASK_TABLE[task_sign][1]为附加参数
                 res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
+                res_str = applications.tuple2str(res)
                 async with content_lock:        # 保护内容更新
-                    content_need_to_show = res if res else 'None'
-                if res is None:
-                    _log.warning("未检测到结果，返回FFFFFFFF")
-                    await ser.new_write("FFFFFFFF", head="@", tail="#")
-                else:
-                    await ser.new_write(applications.tuple2str(res), head="@", tail="#")
+                    content_need_to_show = res_str if res else 'None'
+                    
+                await ser.new_write(res_str, head="@", tail="#")
+                _log.info(f"发送结果: {res_str}")
 
                 await detecting_LED.off()
 

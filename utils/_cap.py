@@ -48,7 +48,7 @@ class Cap(cv2.VideoCapture):
         res = self.height - self.NEED2CUT
         return res if res > 0 else self.height
 
-    def __init__(self, _id: int|None = None, w: int = 320, h: int = 240, fps: int = 60) -> None:
+    def __init__(self, _id: int|None = None, w: int = 1920, h: int = 1080, fps: int = 60) -> None:
         if _id is None:
             caps = Cap.getCapIndex()
             if caps:
@@ -58,10 +58,10 @@ class Cap(cv2.VideoCapture):
         self.width = w
         self.height = h
         super().__init__(_id)
-        self.set(3, w)
-        self.set(4, h)
-        self.set(5, fps)
-        self.set(6, cv2.VideoWriter.fourcc("M", "J", "P", "G"))
+        self.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        self.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        self.set(cv2.CAP_PROP_FPS, fps)
+        self.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc("M", "J", "P", "G"))
         self.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     def read(self, image: cv2.typing.MatLike | None = None):

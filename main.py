@@ -6,6 +6,7 @@ from utils import Cap, Uart, is_desktop_environment
 from applications import Applications
 import platform
 from utils import Switch, LED, OLED_I2C
+import time
 
 
 _log = logger.bind(module="App")
@@ -79,13 +80,15 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
                 await detecting_LED.on()
                 # TASK_TABLE[task_sign][0]为函数指针
                 # TASK_TABLE[task_sign][1]为附加参数
+                start_time = time.perf_counter()
                 res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
                 res_str = applications.tuple2str(res)
                 async with content_lock:        # 保护内容更新
                     content_need_to_show = res_str if res else 'None'
                     
                 await ser.new_write(res_str, head="@", tail="#")
-                _log.info(f"发送结果: {res_str}")
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                _log.info(f"发送结果: {res_str} (耗时: {elapsed_ms:.2f} ms)")
 
                 await detecting_LED.off()
 

@@ -48,7 +48,7 @@ class Cap(cv2.VideoCapture):
         res = self.height - self.NEED2CUT
         return res if res > 0 else self.height
 
-    def __init__(self, _id: int|None = None, w: int = 1920, h: int = 1080, fps: int = 60) -> None:
+    def __init__(self, _id: int|None = None, w: int = 640, h: int = 480, fps: int = 60) -> None:
         if _id is None:
             caps = Cap.getCapIndex()
             if caps:

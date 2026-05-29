@@ -1,12 +1,15 @@
 [Unit]
-Description=GPIO Setup Service
-After=multi-user.target
+Description=Run Main Auto Service
+After=multi-user.target ttys3-permission.service gpio-setup.service
+Requires=ttys3-permission.service gpio-setup.service
 
 [Service]
 Type=simple
-ExecStart=/media/sdcard/code/Engineering-innovation-competition-vision/run_auto/run_main.sh
-RemainAfterExit=yes
-User=root
+ExecStart=/home/lckfb/.local/bin/uv run main
+User=lckfb
+WorkingDirectory=/userdata/code/GC2026
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

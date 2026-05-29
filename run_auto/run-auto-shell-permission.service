@@ -1,0 +1,11 @@
+[Unit]
+Description=Set Bash Shell Permission
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/chmod +x /userdata/code/GC2026/run_auto/*.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

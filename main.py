@@ -84,7 +84,7 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
                 res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
                 res_str = applications.tuple2str(res)
                 async with content_lock:        # 保护内容更新
-                    content_need_to_show = res_str if res else 'None'
+                    content_need_to_show = str(res) if res else 'None'
                     
                 await ser.new_write(res_str, head="@", tail="#")
                 elapsed_ms = (time.perf_counter() - start_time) * 1000

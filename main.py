@@ -35,7 +35,7 @@ server_ip = ""
 server_ip_lock = asyncio.Lock()
 
 
-SERVER_INTERFACE = "wlan0"
+SERVER_INTERFACE = "eth0"
 SERVER_PORT = 8080
 SERIAL_PORT = "/dev/ttyS3"
 

@@ -222,6 +222,7 @@ class SendImgUDP(SendImg):
     """服务端视频发送(UDP)"""
     EOF_MARKER = b'EOF'
     BUFFER_SIZE = 65536  # UDP最大接收缓冲区大小
+    CHUNK_MAX_SIZE = 1400  # 每个UDP分片的最大数据大小（适应以太网MTU）
     B_IP = ""
     _ip_lst = set()
 
@@ -313,23 +314,25 @@ class SendImgUDP(SendImg):
         return await loop.run_in_executor(None, self._sync_connecting)
 
     def _sync_send(self, _img: cv2.typing.MatLike) -> bool:
-        """同步版本：发送图像数据"""
+        """同步版本：发送图像数据（分片发送，避免UDP报文过大）"""
         if not self.clients_ip:
             return False
 
         _, img_encoded = cv2.imencode('.jpg', _img)
         img_data = img_encoded.tobytes()
+        total_length = len(img_data)
 
-        # 创建包头：包头包含数据长度
-        header = struct.pack('!I', len(img_data))  # '!I' 表示大端字节序的一个无符号整数（数据长度）
+        # 分片发送：每个UDP包携带 (total_length + offset) 8字节头部 + 数据块
+        offset = 0
+        while offset < total_length:
+            chunk = img_data[offset:offset + self.CHUNK_MAX_SIZE]
+            # 头部：总长度(4) + 偏移量(4)，接收端据此重组
+            packet = struct.pack('!II', total_length, offset) + chunk
+            for ip in self.clients_ip:
+                self.server_socket.sendto(packet, (ip, self.port))
+            offset += len(chunk)
 
-        # 构造完整数据包：包头 + 图像数据 + 包尾
-        packet = header + img_data + self.EOF_MARKER
-
-        # 发送图像数据到对端
-        for ip in self.clients_ip:
-            self.server_socket.sendto(packet, (ip, self.port))
-            _log.info(f"已发送数据到 {ip}，端口: {self.port}")
+        _log.info(f"已发送数据，总大小: {total_length} bytes，分片数: {(total_length + self.CHUNK_MAX_SIZE - 1) // self.CHUNK_MAX_SIZE}")
         return True
 
     async def send(self, _img: cv2.typing.MatLike) -> bool:
@@ -359,11 +362,61 @@ class ReceiveImgUDP(ReceiveImg):
         # 发起连接请求
         self.client_socket.sendto(b'connect', (self.host, self.port))
 
+        # 帧重组状态
+        self._recv_buffer: bytearray | None = None
+        self._recv_total: int = 0
+        self._recv_received: int = 0
+
+    def _reset_frame_state(self):
+        """重置帧接收状态"""
+        self._recv_buffer = None
+        self._recv_total = 0
+        self._recv_received = 0
+
     def read(self):
         try:
             self.client_socket.settimeout(1)
-            data, addr = self.client_socket.recvfrom(65536)
+
+            # 循环接收分片，直到一帧数据收齐
+            while True:
+                data, addr = self.client_socket.recvfrom(65536)
+                if addr != (self.host, self.port):
+                    continue
+
+                # 解析头部：total_length(4) + offset(4)
+                total_length, offset = struct.unpack('!II', data[:8])
+                chunk_data = data[8:]
+
+                # 新帧开始（或总长度变化，说明收到新一帧的第一个分片）
+                if self._recv_buffer is None or self._recv_total != total_length:
+                    self._recv_buffer = bytearray(total_length)
+                    self._recv_total = total_length
+                    self._recv_received = 0
+
+                # 将数据块复制到缓冲区对应位置
+                end = min(offset + len(chunk_data), self._recv_total)
+                self._recv_buffer[offset:end] = chunk_data[:end - offset]
+                self._recv_received += (end - offset)
+
+                # 帧接收完毕
+                if self._recv_received >= self._recv_total:
+                    break
+
+            if self._recv_buffer is None:
+                return False, None
+
+            image_bytes = bytes(self._recv_buffer)
+            self._reset_frame_state()
+
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is not None:
+                return True, frame
+            return False, None
+
         except socket.timeout:
+            # 超时则丢弃当前不完整的帧
+            self._reset_frame_state()
             img = np.zeros((240, 320, 3), dtype=np.uint8)
             cv2.putText(
                 img,
@@ -375,25 +428,6 @@ class ReceiveImgUDP(ReceiveImg):
                 2
             )
             return False, img
-        if addr != (self.host, self.port):
-            _log.warning(f"接收到来自未知地址 {addr} 的数据 {data}")
-            return False, None
-
-        # 解析包头，获取数据长度
-        data_length = struct.unpack('!I', data[:4])[0]  # 获取数据包的长度，前4个字节
-        image_data = data[4:4 + data_length]  # 获取图像数据（包头后面的部分）
-
-        # 包尾检查
-        if data[4 + data_length:4 + data_length + len(b'EOF')] == b'EOF':
-            # 处理图像数据（例如显示）
-            nparr = np.frombuffer(image_data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if frame is not None:
-                return True, frame
-            else:
-                return False, None
-        else:
-            return False, None
 
     def release(self):
         self.client_socket.close()

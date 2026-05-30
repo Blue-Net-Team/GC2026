@@ -318,6 +318,21 @@ class SendImgUDP(SendImg):
         if not self.clients_ip:
             return False
 
+        # 非阻塞检查：是否有新的客户端连接请求（客户端切换网卡后自动更新）
+        self.server_socket.setblocking(False)
+        try:
+            while True:
+                data, addr = self.server_socket.recvfrom(self.BUFFER_SIZE)
+                if data == b'connect' and addr[0] != self.host:
+                    if addr[0] != self.B_IP:
+                        _log.info(f"客户端连接已切换: {addr[0]}")
+                    self.B_IP, _ = addr
+                    self._ip_lst = {addr[0]}  # 仅保留最新客户端
+        except BlockingIOError:
+            pass  # 缓冲区无数据，正常继续发送
+        finally:
+            self.server_socket.setblocking(True)
+
         _, img_encoded = cv2.imencode('.jpg', _img)
         img_data = img_encoded.tobytes()
         total_length = len(img_data)

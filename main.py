@@ -35,7 +35,7 @@ server_ip = ""
 server_ip_lock = asyncio.Lock()
 
 
-NETWORK_INTERFACES = ["eth0", "wlan0"]
+SERVER_INTERFACE = ""  # 监听所有可用网卡
 SERVER_PORT = 8080
 SERIAL_PORT = "/dev/ttyS3"
 
@@ -150,26 +150,20 @@ async def board_show():
         await asyncio.sleep(0.05)
 
 
-def _resolve_interface() -> str:
-    """按优先级尝试网卡列表，返回第一个有有效IP的网卡名称。"""
-    for iface in NETWORK_INTERFACES:
-        ip = SendImgUDP.get_ip_address(iface)
-        if ip:
-            _log.info(f"网卡 {iface} 已就绪, IP: {ip}")
-            return iface
-        _log.warning(f"网卡 {iface} 无有效IP地址, 尝试下一个...")
-    _log.warning("所有网卡均无有效IP地址, 将绑定 0.0.0.0")
-    return ""
-
 async def img_trans():
     global img_need_to_send, server_ip
-    # 通过网卡设备自动获取IP地址（含 eth0 -> wlan0 优先级回退）
-    interface = _resolve_interface()
-    sendImgUDP = await SendImgUDP.create(interface=interface, port=SERVER_PORT)
-    host_ip = sendImgUDP.host_ip
-    _log.info(f"服务端IP: {host_ip if host_ip else '未连接(将监听所有接口)'}")
-    async with server_ip_lock:
-        server_ip = host_ip
+    # 绑定所有网卡，UDP 图传
+    sendImgUDP = await SendImgUDP.create(interface=SERVER_INTERFACE, port=SERVER_PORT)
+    _log.info("UDP 服务已启动 (监听所有网卡)")
+
+    # 从可用网卡获取一个 IP 地址用于 OLED 显示
+    for iface in ("eth0", "wlan0"):
+        ip = SendImgUDP.get_ip_address(iface)
+        if ip:
+            _log.info(f"本机IP: {ip}")
+            async with server_ip_lock:
+                server_ip = ip
+            break
 
     connected = False
     while not connected:

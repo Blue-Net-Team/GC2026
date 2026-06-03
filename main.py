@@ -57,43 +57,55 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
     global img_need_to_send, content_need_to_show
 
     ser = Uart(ser_port)
+    current_task = None  # None 表示 IDLE，否则为正在执行的任务标识
 
     while True:
         # 获取当前运行模式
         async with mode_lock:
             run_mode = RUN_MODE
         if run_mode == "main":
-            # 读取串口任务
+            # 读取串口任务（带超时，不会永久阻塞）
             task_sign = await ser.new_read(head="@", tail="#")
-            if task_sign is None:
-                _log.warning("未收到任务")
+
+            if task_sign == "E":
+                _log.info("收到终止指令，停止当前任务")
+                current_task = None
                 continue
-            _log.info(f"收到任务: {task_sign}")
+            elif task_sign in TASK_TABLE:
+                _log.info(f"收到任务: {task_sign}")
+                current_task = task_sign
+            elif task_sign is not None:
+                _log.warning(f"未知指令: {task_sign}")
+
+            # 如果没有正在执行的任务，短暂休眠后继续等待指令
+            if current_task is None:
+                await asyncio.sleep(0.01)
+                continue
 
             ret, img = cap.read()
             if not ret:
                 _log.warning("无法读取摄像头图像")
-                break
+                await asyncio.sleep(0.01)
+                continue
 
             # 处理图像
-            else:
-                await detecting_LED.on()
-                # TASK_TABLE[task_sign][0]为函数指针
-                # TASK_TABLE[task_sign][1]为附加参数
-                start_time = time.perf_counter()
-                res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
-                res_str = applications.tuple2str(res)
-                async with content_lock:        # 保护内容更新
-                    content_need_to_show = str(res) if res else 'None'
-                    
-                await ser.new_write(res_str, head="@", tail="#")
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                _log.info(f"发送结果: {res_str} (耗时: {elapsed_ms:.2f} ms)")
+            await detecting_LED.on()
+            # TASK_TABLE[current_task][0]为函数指针
+            # TASK_TABLE[current_task][1]为附加参数
+            start_time = time.perf_counter()
+            res, res_img = await TASK_TABLE[current_task][0](img, TASK_TABLE[current_task][1])
+            res_str = applications.tuple2str(res)
+            async with content_lock:        # 保护内容更新
+                content_need_to_show = str(res) if res else 'None'
 
-                await detecting_LED.off()
+            await ser.new_write(res_str, head="@", tail="#")
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            _log.info(f"发送结果: {res_str} (耗时: {elapsed_ms:.2f} ms)")
 
-                async with img_lock:
-                    img_need_to_send = res_img.copy()
+            await detecting_LED.off()
+
+            async with img_lock:
+                img_need_to_send = res_img.copy()
 
             # 仅在桌面环境下显示图像
             if is_desktop_environment():

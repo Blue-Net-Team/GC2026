@@ -266,9 +266,10 @@ class ReceiverScreen(QWidget):
 
     def _on_state_changed(self, state: str) -> None:
         self._status_label.setText(state)
-        connected = state == "已连接"
-        self._connect_btn.setEnabled(not connected)
-        self._disconnect_btn.setEnabled(connected)
+        # 连接中和已连接状态都允许断开，且禁止重复点击连接
+        connecting_or_connected = state in ("连接中", "已连接", "重连中")
+        self._connect_btn.setEnabled(not connecting_or_connected)
+        self._disconnect_btn.setEnabled(connecting_or_connected)
 
     def _on_source_name_changed(self, name: str) -> None:
         self._status_label.setText(name)

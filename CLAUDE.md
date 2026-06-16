@@ -41,7 +41,8 @@ uv run main
 |------|------|
 | `uv sync` | 安装依赖（根据 `uv.lock`） |
 | `uv sync --extra test` | 安装包含测试依赖 |
-| `uv run main` | 启动主程序（三个协程并行） |
+| `uv run app` | 启动桌面调参应用（PyQt6） |
+| `uv run main` | 启动嵌入式主程序（三个协程并行） |
 | `uv run setup color --capid 0` | 颜色阈值调试工具 |
 | `uv run setup colorring --capid 0` | 色环检测阈值调试工具 |
 | `uv run img_trans` | 图像传输（Linux 发送 / Windows 接收） |

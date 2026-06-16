@@ -276,6 +276,18 @@
                   "content": "编辑"
                 }
               }
+            },
+            {
+              "id": "q71GmG",
+              "type": "ref",
+              "ref": "lmJrX",
+              "name": "DeleteBtn",
+              "width": "fill_container",
+              "descendants": {
+                "t9yF2": {
+                  "content": "删除"
+                }
+              }
             }
           ]
         }
@@ -1620,7 +1632,7 @@
                       "width": "fill_container",
                       "descendants": {
                         "t9yF2": {
-                          "content": "保存并部署"
+                          "content": "重置"
                         }
                       }
                     }
@@ -2002,38 +2014,55 @@
                 },
                 {
                   "type": "frame",
-                  "id": "EcXTk",
+                  "id": "Tr78E",
                   "name": "TopActions",
+                  "width": 370,
+                  "height": 36,
                   "gap": 10,
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "w8LFPt",
+                      "id": "IcbI6",
                       "type": "ref",
                       "ref": "lmJrX",
                       "name": "ImportBtn",
+                      "width": "fill_container",
                       "descendants": {
                         "t9yF2": {
-                          "content": "导入 YAML"
+                          "content": "导入配置"
                         }
                       }
                     },
                     {
-                      "id": "vv5C4",
+                      "id": "k94YZH",
                       "type": "ref",
                       "ref": "lmJrX",
-                      "name": "ExportBtn",
+                      "name": "DownloadBtn",
+                      "width": "fill_container",
                       "descendants": {
                         "t9yF2": {
-                          "content": "导出 YAML"
+                          "content": "下载配置"
                         }
                       }
                     },
                     {
-                      "id": "JVkJA",
+                      "id": "lgD9f",
+                      "type": "ref",
+                      "ref": "lmJrX",
+                      "name": "UploadBtn",
+                      "width": "fill_container",
+                      "descendants": {
+                        "t9yF2": {
+                          "content": "上传配置"
+                        }
+                      }
+                    },
+                    {
+                      "id": "Rb1ZB",
                       "type": "ref",
                       "ref": "uXYUL",
                       "name": "AddDeviceBtn",
+                      "width": "fill_container",
                       "descendants": {
                         "wBShP": {
                           "content": "添加设备"
@@ -2101,6 +2130,9 @@
                         },
                         "SRMi4/t9yF2": {
                           "content": "编辑"
+                        },
+                        "q71GmG/t9yF2": {
+                          "content": "删除"
                         }
                       }
                     },
@@ -2131,6 +2163,9 @@
                         },
                         "SRMi4/t9yF2": {
                           "content": "编辑"
+                        },
+                        "q71GmG/t9yF2": {
+                          "content": "删除"
                         }
                       }
                     }
@@ -5549,7 +5584,7 @@
                       "width": "fill_container",
                       "descendants": {
                         "t9yF2": {
-                          "content": "保存并部署"
+                          "content": "重置"
                         }
                       }
                     }

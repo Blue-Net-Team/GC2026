@@ -127,6 +127,59 @@ QPushButton#secondary:hover {{
     border: 1px solid {c.accent_primary};
 }}
 
+QComboBox {{
+    background-color: {c.surface_tertiary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.border_primary};
+    border-radius: {m.radius_md}px;
+    padding: 8px 12px;
+    min-width: 100px;
+    outline: none;
+}}
+
+QComboBox:hover {{
+    background-color: {c.surface_elevated};
+    border: 1px solid {c.accent_primary};
+}}
+
+QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 28px;
+    background-color: transparent;
+    border-left: 1px solid {c.border_primary};
+    border-top-right-radius: {m.radius_md}px;
+    border-bottom-right-radius: {m.radius_md}px;
+}}
+
+QComboBox:hover::drop-down {{
+    border-left: 1px solid {c.accent_primary};
+}}
+
+QComboBox QAbstractItemView {{
+    background-color: {c.surface_tertiary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.border_primary};
+    border-radius: {m.radius_md}px;
+    selection-background-color: {c.accent_primary};
+    selection-color: {c.foreground_primary};
+    outline: none;
+    padding: 4px;
+}}
+
+QComboBox QAbstractItemView::item {{
+    padding: 8px 12px;
+    border-radius: {m.radius_sm}px;
+}}
+
+QComboBox QAbstractItemView::item:hover {{
+    background-color: {c.surface_elevated};
+}}
+
+QComboBox QAbstractItemView::item:selected {{
+    background-color: {c.accent_primary};
+}}
+
 QLineEdit {{
     background-color: {c.surface_tertiary};
     color: {c.foreground_primary};

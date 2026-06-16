@@ -26,7 +26,8 @@ from PyQt6.QtWidgets import (
 from loguru import logger
 
 from app.core.config_bridge import AppConfig, ConfigBridge
-from app.core.udp_receiver import UdpReceiver
+from app.core.device_store import DeviceStore
+from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 
 _log = logger.bind(module="MainWindow")
@@ -216,12 +217,14 @@ class MainWindow(QMainWindow):
     def __init__(
         self,
         config_bridge: ConfigBridge,
-        udp_receiver: UdpReceiver,
+        frame_source_manager: FrameSourceManager,
+        device_store: DeviceStore,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._config_bridge = config_bridge
-        self._udp_receiver = udp_receiver
+        self._frame_source_manager = frame_source_manager
+        self._device_store = device_store
 
         self.setWindowTitle("工创2026调参")
         self.resize(1280, 800)
@@ -247,9 +250,9 @@ class MainWindow(QMainWindow):
         from app.ui.screens.color_tuner_screen import ColorTunerScreen
         from app.ui.screens.color_ring_tuner_screen import ColorRingTunerScreen
 
-        self._receiver_screen = ReceiverScreen(udp_receiver)
-        self._color_screen = ColorTunerScreen(config_bridge, udp_receiver)
-        self._color_ring_screen = ColorRingTunerScreen(config_bridge, udp_receiver)
+        self._receiver_screen = ReceiverScreen(frame_source_manager, device_store)
+        self._color_screen = ColorTunerScreen(config_bridge, frame_source_manager)
+        self._color_ring_screen = ColorRingTunerScreen(config_bridge, frame_source_manager)
 
         self._stack.addWidget(self._receiver_screen)
         self._stack.addWidget(self._color_screen)
@@ -266,18 +269,27 @@ class MainWindow(QMainWindow):
 
         self._sidebar.set_active_screen(0)
 
-        # 连接 UDP 状态变化
-        self._udp_receiver.state_changed.connect(self._on_udp_state_changed)
+        # 连接图像源状态变化
+        self._frame_source_manager.state_changed.connect(self._on_source_state_changed)
+        self._frame_source_manager.source_name_changed.connect(self._on_source_name_changed)
 
     def _on_screen_changed(self, index: int) -> None:
         self._stack.setCurrentIndex(index)
 
-    def _on_udp_state_changed(self, state: str) -> None:
-        ip = self._udp_receiver.server_ip
-        port = self._udp_receiver.port
-        address = f"{ip}:{port}" if ip else "--"
-        self._sidebar.update_connection_status(state, address=address)
+    def _on_source_state_changed(self, state: str) -> None:
+        name = self._frame_source_manager.current_name
+        address = "--"
+        if name and name != "未连接" and not name.startswith("本地摄像头"):
+            address = name
+        self._sidebar.update_connection_status(state, device_name=name, address=address)
+
+    def _on_source_name_changed(self, name: str) -> None:
+        state = "已连接" if self._frame_source_manager.is_connected() else "未连接"
+        address = "--"
+        if name and name != "未连接" and not name.startswith("本地摄像头"):
+            address = name
+        self._sidebar.update_connection_status(state, device_name=name, address=address)
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        self._udp_receiver.disconnect()
+        self._frame_source_manager.disconnect()
         event.accept()

@@ -94,14 +94,15 @@ QLabel {{
 QPushButton {{
     background-color: {c.accent_primary};
     color: {c.foreground_primary};
-    border: none;
+    border: 1px solid transparent;
     border-radius: {m.radius_md}px;
     padding: 10px 16px;
     font-weight: 500;
 }}
 
 QPushButton:hover {{
-    background-color: {cls._lighten(c.accent_primary, 10)};
+    background-color: {cls._lighten(c.accent_primary, 20)};
+    border: 1px solid {cls._lighten(c.accent_primary, 40)};
 }}
 
 QPushButton:pressed {{
@@ -111,6 +112,7 @@ QPushButton:pressed {{
 QPushButton:disabled {{
     background-color: {c.surface_elevated};
     color: {c.foreground_muted};
+    border: 1px solid transparent;
 }}
 
 QPushButton#secondary {{
@@ -122,6 +124,7 @@ QPushButton#secondary {{
 QPushButton#secondary:hover {{
     background-color: {c.surface_tertiary};
     color: {c.foreground_primary};
+    border: 1px solid {c.accent_primary};
 }}
 
 QLineEdit {{

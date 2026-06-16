@@ -18,9 +18,12 @@ dependencies = [
     "luma-oled>=3.15.0",
     "numpy>=2.4.3",
     "opencv-python>=4.13.0.92",
+    "paramiko>=5.0.0",
     "pillow>=12.2.0",
+    "pyqt6>=6.11.0",
     "pyserial>=3.5",
     "pyyaml>=6.0.3",
+    "qasync>=0.28.0",
 ]
 
 [[index]]
@@ -44,3 +47,4 @@ asyncio_mode = "auto"
 main = "main:cli"
 setup = "setup:cli"
 img_trans = "img_trans:cli"
+app = "app:cli"

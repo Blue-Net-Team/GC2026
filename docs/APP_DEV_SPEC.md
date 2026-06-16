@@ -144,9 +144,21 @@ GC2026/
 
 ## 4. 启动约定
 
-### 4.1 入口文件 `app.py`
+### 4.1 入口约定
 
-`app.py` 位于项目根目录，仅做入口委托：
+由于项目根目录需要同时存在 `app.py` 和 `app/` 包，存在同名导入冲突。约定如下：
+
+- `app/__init__.py` 暴露 `cli()` 函数，作为 `uv run app` 的实际入口。
+- `app.py` 位于项目根目录，仅作为便捷入口的薄包装：
+
+```python
+from app import cli
+
+if __name__ == "__main__":
+    cli()
+```
+
+`app/__init__.py` 内容：
 
 ```python
 import sys
@@ -158,9 +170,6 @@ from app.main import main
 def cli(debug: bool) -> None:
     """启动 GC2026 桌面调参应用"""
     sys.exit(main(debug=debug))
-
-if __name__ == "__main__":
-    cli()
 ```
 
 ### 4.2 `pyproject.toml` 配置
@@ -344,7 +353,8 @@ target_angle: 46
 
 ## 10. 代码提交与新增文件规范
 
-1. 新增 `.py` 文件顶部保留项目 GPL 声明（参考 `detector/` 现有文件）。
+1. 新增 `.py` 文件顶部保留项目 GPL 声明，署名统一为 `Copyright (C) 2025 IVEN-CN(He Yunfeng)`（桌面应用新增文件不再包含 Anan-yy）。
+
 2. 中文注释优先，代码标识符使用英文。
 3. 类型注解：Python 3.12+，支持 `|` 联合类型。
 4. 不引入新的包管理器或构建工具，统一使用 `uv`。
@@ -375,9 +385,9 @@ app.py
 ```toml
 dependencies = [
     # 已有依赖 ...
-    "pyqt6>=6.9.0",
-    "qasync>=0.27.1",
-    "paramiko>=3.5.1",
+    "pyqt6>=6.11.0",
+    "qasync>=0.28.0",
+    "paramiko>=5.0.0",
 ]
 ```
 
@@ -388,3 +398,5 @@ uv add pyqt6 qasync paramiko
 ```
 
 或手动修改后运行 `uv sync`。
+
+> 注：`keyring` 当前阶段不直接使用，若作为传递依赖被安装可忽略。

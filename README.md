@@ -2,6 +2,8 @@
 
 GC2026 是一个基于 OpenCV 的计算机视觉项目，主要用于物料颜色检测、圆环检测以及图像传输。项目支持在 Linux（嵌入式板卡）和 Windows 环境下运行，可通过串口接收任务指令并返回识别结果。
 
+此外，项目包含一个跨平台桌面调参应用（`app/`），用于通过 UDP 接收图传画面、可视化调节参数、远程部署配置和管理服务。
+
 ***
 
 ## 功能简介
@@ -117,13 +119,16 @@ uv run python app.py
 
 ```
 GC2026/
-├── app.py                  # 主程序入口
+├── app.py                  # 桌面调参应用入口
+├── main.py                 # 嵌入式主程序入口
 ├── applications.py         # 应用逻辑（颜色/圆环检测）
 ├── setup.py                # 参数调试工具入口
+├── img_trans.py            # 图像传输入口
 ├── config.yaml             # 颜色检测配置文件
 ├── pyproject.toml          # 项目配置与依赖
 ├── uv.lock                 # 依赖锁定文件
 ├── .python-version         # Python 版本指定（3.12）
+├── app/                    # 桌面调参应用包
 ├── ImgTrans/               # 图像传输模块（UDP 发送/接收）
 ├── detector/               # 检测器模块（颜色、圆环）
 ├── utils/                  # 工具模块（串口、GPIO、摄像头等）
@@ -138,14 +143,23 @@ GC2026/
 
 | 入口名               | 功能          | 有参数 |
 | ----------------- | ----------- | --- |
-| `app`             | 启动主程序       | 否   |
+| `app`             | 启动桌面调参应用   | 否   |
+| `main`            | 启动嵌入式主程序   | 否   |
 | `setup color`     | 交互式调节颜色检测阈值 | 是   |
 | `setup colorring` | 交互式调节色环检测阈值 | 是   |
 | `img_trans`       | 图像传输（发送/接收） | 否   |
 
 ***
 
-### 1. `uv run app` — 主程序
+### 1. `uv run app` — 桌面调参应用
+
+启动 PyQt6 桌面调参应用，提供 UDP 图传接收、颜色/色环参数调节、配置管理、SSH 服务管理和日志查看等功能。
+
+```bash
+uv run app
+```
+
+### 2. `uv run main` — 嵌入式主程序
 
 无额外参数，启动后并行运行三个异步协程：
 
@@ -156,12 +170,12 @@ GC2026/
 | 图像传输    | 将处理后的图像通过 UDP 发送到客户端，调试模式是时直接发送原始图像                                  |
 
 ```bash
-uv run app
+uv run main
 ```
 
 ***
 
-### 2. `uv run setup color` — 颜色检测参数调试
+### 3. `uv run setup color` — 颜色检测参数调试
 
 打开 Trackbar 窗口，实时调整 HSV 颜色阈值（色相中心、容差、饱和度范围、明度范围、物料面积范围等），按 **`s`** 保存到 `config.yml`，按 **`q`** 退出。
 
@@ -182,7 +196,7 @@ uv run setup color --remote --capip 192.168.1.100 --port 4444
 
 ***
 
-### 3. `uv run setup colorring` — 色环检测参数调试
+### 4. `uv run setup colorring` — 色环检测参数调试
 
 打开 Trackbar 窗口，实时调整色环检测的全部参数（腐蚀迭代次数、CLAHE 对比度、高斯模糊、形态学梯度、霍夫圆检测参数等），按 **`s`** 保存到 `config.yml`，按 **`q`** 退出。
 
@@ -203,7 +217,7 @@ uv run setup colorring --remote --capip 192.168.1.100 --port 4444
 
 ***
 
-### 4. `uv run img_trans` — 图像传输
+### 5. `uv run img_trans` — 图像传输
 
 无额外参数。根据操作系统平台自动切换模式：
 

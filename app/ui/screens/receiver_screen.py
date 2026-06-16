@@ -82,8 +82,9 @@ class VideoLabel(QLabel):
 class ReceiverScreen(QWidget):
     """图传接收页面"""
 
-    SOURCE_LOCAL = "__local__"
-    SOURCE_MANUAL = "__manual__"
+    MODE_LOCAL = "local"
+    MODE_SAVED = "saved"
+    MODE_MANUAL = "manual"
 
     def __init__(
         self,
@@ -114,12 +115,17 @@ class ReceiverScreen(QWidget):
         top_bar.addWidget(self._title)
         top_bar.addStretch()
 
-        # 图像源选择下拉框
-        self._source_combo = QComboBox()
-        self._source_combo.setMinimumWidth(220)
-        self._source_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
-        top_bar.addWidget(self._source_combo)
+        # 图像源类型选择下拉框
+        self._mode_combo = QComboBox()
+        self._mode_combo.setMinimumWidth(160)
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        top_bar.addWidget(self._mode_combo)
+
+        # 已有设备选择下拉框
+        self._device_combo = QComboBox()
+        self._device_combo.setMinimumWidth(160)
+        self._device_combo.setVisible(False)
+        top_bar.addWidget(self._device_combo)
 
         # 手动输入区域
         self._manual_frame = QFrame()
@@ -197,27 +203,37 @@ class ReceiverScreen(QWidget):
         self._manager.error_occurred.connect(self._on_error)
 
         # 初始化下拉框
-        self._refresh_source_combo()
+        self._refresh_mode_combo()
+        self._refresh_device_combo()
 
-    def _refresh_source_combo(self) -> None:
-        self._source_combo.clear()
-        self._source_combo.addItem("本地摄像头", self.SOURCE_LOCAL)
+    def _refresh_mode_combo(self) -> None:
+        self._mode_combo.clear()
+        self._mode_combo.addItem("本机摄像头", self.MODE_LOCAL)
+        self._mode_combo.addItem("已有设备", self.MODE_SAVED)
+        self._mode_combo.addItem("手动输入图传摄像头", self.MODE_MANUAL)
 
+    def _refresh_device_combo(self) -> None:
+        self._device_combo.clear()
         for device in self._device_store.devices:
-            self._source_combo.addItem(device.name, device)
+            self._device_combo.addItem(device.name, device)
 
-        self._source_combo.addItem("手动输入 IP:端口", self.SOURCE_MANUAL)
-
-    def _on_source_changed(self, _index: int) -> None:
-        data = self._source_combo.currentData()
-        self._manual_frame.setVisible(data == self.SOURCE_MANUAL)
+    def _on_mode_changed(self, _index: int) -> None:
+        mode = self._mode_combo.currentData()
+        self._device_combo.setVisible(mode == self.MODE_SAVED)
+        self._manual_frame.setVisible(mode == self.MODE_MANUAL)
 
     def _on_connect(self) -> None:
-        data = self._source_combo.currentData()
+        mode = self._mode_combo.currentData()
 
-        if data == self.SOURCE_LOCAL:
+        if mode == self.MODE_LOCAL:
             self._manager.connect_local_camera(0)
-        elif data == self.SOURCE_MANUAL:
+        elif mode == self.MODE_SAVED:
+            device = self._device_combo.currentData()
+            if device is None:
+                QMessageBox.warning(self, "选择错误", "请先选择一个已有设备")
+                return
+            self._manager.connect_saved_device(device)
+        elif mode == self.MODE_MANUAL:
             ip = self._ip_input.text().strip()
             port_text = self._port_input.text().strip()
             if not ip:
@@ -229,8 +245,6 @@ class ReceiverScreen(QWidget):
                 QMessageBox.warning(self, "输入错误", "端口号必须为数字")
                 return
             self._manager.connect_udp(ip, port)
-        elif isinstance(data, RemoteDevice):
-            self._manager.connect_saved_device(data)
 
     def _on_disconnect(self) -> None:
         self._manager.disconnect()

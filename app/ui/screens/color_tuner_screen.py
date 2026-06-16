@@ -148,6 +148,7 @@ class ParamSlider(QWidget):
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(min_val, max_val)
+        self._slider.setTracking(False)
         self._slider.valueChanged.connect(self._on_slider_changed)
         layout.addWidget(self._slider)
 

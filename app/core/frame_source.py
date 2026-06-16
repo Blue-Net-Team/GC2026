@@ -220,11 +220,30 @@ class SavedDeviceFrameSource(UdpFrameSource):
         return self._name
 
 
+class _CameraInitThread(QThread):
+    """在后台线程中尝试打开本地摄像头，避免阻塞 UI"""
+
+    ready = pyqtSignal(int)
+    error = pyqtSignal(str)
+
+    def __init__(self, camera_index: int) -> None:
+        super().__init__()
+        self.camera_index = camera_index
+
+    def run(self) -> None:
+        cap = cv2.VideoCapture(self.camera_index)
+        if cap.isOpened():
+            cap.release()
+            self.ready.emit(self.camera_index)
+        else:
+            self.error.emit(f"无法打开本地摄像头 {self.camera_index}")
+
+
 class LocalCameraFrameSource(FrameSource):
     """本地摄像头图像源
 
-    使用 QTimer 在主线程中定期读取摄像头帧，避免 QThread 管理复杂性和
-    VideoCapture.read() 阻塞导致的线程销毁问题。
+    使用后台线程初始化摄像头（避免 UI 卡顿），初始化成功后在主线程通过
+    QTimer 定期读取帧，避免 QThread 生命周期管理问题。
     """
 
     def __init__(self, camera_index: int = 0, parent: Optional[QObject] = None) -> None:
@@ -234,19 +253,31 @@ class LocalCameraFrameSource(FrameSource):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._read_frame)
         self._running = False
+        self._init_thread: Optional[_CameraInitThread] = None
 
     def start(self) -> None:
         if self._running:
             return
-        self._cap = cv2.VideoCapture(self.camera_index)
+        self.state_changed.emit("连接中")
+        self._init_thread = _CameraInitThread(self.camera_index)
+        self._init_thread.ready.connect(self._on_init_ready)
+        self._init_thread.error.connect(self.error_occurred)
+        self._init_thread.finished.connect(self._cleanup_init_thread)
+        self._init_thread.start()
+
+    def _on_init_ready(self, camera_index: int) -> None:
+        self._cap = cv2.VideoCapture(camera_index)
         if not self._cap.isOpened():
-            self.error_occurred.emit(f"无法打开本地摄像头 {self.camera_index}")
+            self.error_occurred.emit(f"无法打开本地摄像头 {camera_index}")
             return
 
         self._running = True
         self.state_changed.emit("已连接")
         # 约 30fps
         self._timer.start(33)
+
+    def _cleanup_init_thread(self) -> None:
+        self._init_thread = None
 
     def _read_frame(self) -> None:
         if self._cap is None:
@@ -261,6 +292,9 @@ class LocalCameraFrameSource(FrameSource):
             self._cap.release()
             self._cap = None
         self._running = False
+        if self._init_thread is not None and self._init_thread.isRunning():
+            self._init_thread.wait(1000)
+            self._init_thread = None
 
     def is_running(self) -> bool:
         return self._running

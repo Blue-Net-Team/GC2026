@@ -139,7 +139,8 @@ class ParamSlider(QWidget):
 
         self._spin = QSpinBox()
         self._spin.setRange(min_val, max_val)
-        self._spin.setFixedWidth(64)
+        self._spin.setFixedWidth(80)
+        self._spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self._spin.valueChanged.connect(self._on_spin_changed)
         header.addWidget(self._spin)
 

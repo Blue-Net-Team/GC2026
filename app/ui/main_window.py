@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -59,7 +60,9 @@ class NavItem(QWidget):
         self._layout.addWidget(self._label)
         self._layout.addStretch()
 
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.set_active(False)
 
     def set_active(self, active: bool) -> None:
@@ -110,13 +113,13 @@ class Sidebar(QWidget):
         # Logo
         logo = QLabel("工创2026调参")
         logo.setStyleSheet(
-            f"color: {AppTheme.colors.foreground_primary}; font-size: 20px; font-weight: 700;"
+            f"color: {AppTheme.colors.foreground_primary}; font-size: 20px; font-weight: 700; background-color: transparent;"
         )
         layout.addWidget(logo)
 
         sub_logo = QLabel("广东海洋大学蓝网科创定制")
         sub_logo.setStyleSheet(
-            f"color: {AppTheme.colors.foreground_muted}; font-size: 11px; font-family: {AppTheme.fonts.mono};"
+            f"color: {AppTheme.colors.foreground_muted}; font-size: 11px; font-family: {AppTheme.fonts.mono}; background-color: transparent;"
         )
         layout.addWidget(sub_logo)
 

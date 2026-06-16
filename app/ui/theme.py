@@ -176,9 +176,10 @@ QTabBar::tab {{
     background-color: transparent;
     color: {c.foreground_secondary};
     border: none;
-    padding: 10px 16px;
+    padding: 8px 14px;
     margin-right: 4px;
     border-radius: {m.radius_md}px;
+    min-width: 72px;
 }}
 
 QTabBar::tab:selected {{

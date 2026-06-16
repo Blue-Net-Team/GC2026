@@ -245,15 +245,18 @@ class MainWindow(QMainWindow):
         # 延迟导入页面，避免循环依赖
         from app.ui.screens.receiver_screen import ReceiverScreen
         from app.ui.screens.color_tuner_screen import ColorTunerScreen
+        from app.ui.screens.color_ring_tuner_screen import ColorRingTunerScreen
 
         self._receiver_screen = ReceiverScreen(udp_receiver)
         self._color_screen = ColorTunerScreen(config_bridge, udp_receiver)
+        self._color_ring_screen = ColorRingTunerScreen(config_bridge, udp_receiver)
 
         self._stack.addWidget(self._receiver_screen)
         self._stack.addWidget(self._color_screen)
+        self._stack.addWidget(self._color_ring_screen)
 
         # 其他页面先用占位
-        for title in ("色环调参", "日志", "配置", "服务"):
+        for title in ("日志", "配置", "服务"):
             placeholder = QLabel(f"{title} 页面开发中")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet(

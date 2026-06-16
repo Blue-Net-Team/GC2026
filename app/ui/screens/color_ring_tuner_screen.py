@@ -141,6 +141,7 @@ class AdvancedParamSlider(QWidget):
         self._slider.setRange(slider_min, slider_max)
         self._slider.setSingleStep(slider_step)
         self._slider.setPageStep(slider_step * 5)
+        self._slider.setTracking(False)
         self._slider.valueChanged.connect(self._on_slider_changed)
         layout.addWidget(self._slider)
 

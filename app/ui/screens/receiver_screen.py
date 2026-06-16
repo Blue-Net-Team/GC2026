@@ -3,11 +3,13 @@ Copyright (C) 2025 IVEN-CN(He Yunfeng)
 
 GC2026 桌面调参应用 - 图传接收页面
 ====
-纯图传接收模式：显示实时画面、FPS/丢包统计、连接控制。
+纯图传接收模式：选择图像源（本地摄像头 / 已保存设备 / 手动输入远程摄像头），
+连接后实时显示画面。所有页面共享 FrameSourceManager 提供的同一帧流。
 """
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 import cv2
@@ -15,6 +17,7 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -26,7 +29,8 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.udp_receiver import ReceiverStats, UdpReceiver
+from app.core.device_store import DeviceStore, RemoteDevice
+from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 
 _log = logger.bind(module="ReceiverScreen")
@@ -64,7 +68,6 @@ class VideoLabel(QLabel):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        # 保留原有 pixmap 的缩放
         pixmap = self.pixmap()
         if pixmap is not None and not pixmap.isNull():
             self.setPixmap(
@@ -79,13 +82,22 @@ class VideoLabel(QLabel):
 class ReceiverScreen(QWidget):
     """图传接收页面"""
 
+    SOURCE_LOCAL = "__local__"
+    SOURCE_MANUAL = "__manual__"
+
     def __init__(
         self,
-        udp_receiver: UdpReceiver,
+        frame_source_manager: FrameSourceManager,
+        device_store: DeviceStore,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self._udp_receiver = udp_receiver
+        self._manager = frame_source_manager
+        self._device_store = device_store
+
+        self._frame_count = 0
+        self._last_fps_time = time.time()
+        self._fps = 0.0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -102,16 +114,32 @@ class ReceiverScreen(QWidget):
         top_bar.addWidget(self._title)
         top_bar.addStretch()
 
+        # 图像源选择下拉框
+        self._source_combo = QComboBox()
+        self._source_combo.setMinimumWidth(220)
+        self._source_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
+        top_bar.addWidget(self._source_combo)
+
+        # 手动输入区域
+        self._manual_frame = QFrame()
+        manual_layout = QHBoxLayout(self._manual_frame)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+        manual_layout.setSpacing(8)
+
         self._ip_input = QLineEdit()
-        self._ip_input.setPlaceholderText("设备 IP，例如 192.168.123.8")
-        self._ip_input.setFixedWidth(200)
-        top_bar.addWidget(self._ip_input)
+        self._ip_input.setPlaceholderText("设备 IP")
+        self._ip_input.setFixedWidth(150)
+        manual_layout.addWidget(self._ip_input)
 
         self._port_input = QLineEdit()
         self._port_input.setPlaceholderText("端口")
         self._port_input.setText("8080")
-        self._port_input.setFixedWidth(80)
-        top_bar.addWidget(self._port_input)
+        self._port_input.setFixedWidth(70)
+        manual_layout.addWidget(self._port_input)
+
+        top_bar.addWidget(self._manual_frame)
+        self._manual_frame.hide()
 
         self._connect_btn = QPushButton("连接")
         self._connect_btn.setFixedWidth(80)
@@ -121,6 +149,7 @@ class ReceiverScreen(QWidget):
         self._disconnect_btn = QPushButton("断开")
         self._disconnect_btn.setFixedWidth(80)
         self._disconnect_btn.setObjectName("secondary")
+        self._disconnect_btn.setEnabled(False)
         self._disconnect_btn.clicked.connect(self._on_disconnect)
         top_bar.addWidget(self._disconnect_btn)
 
@@ -151,15 +180,9 @@ class ReceiverScreen(QWidget):
         )
         status_layout.addWidget(self._frame_count_label)
 
-        self._lost_label = QLabel("丢帧: 0")
-        self._lost_label.setStyleSheet(
-            f"color: {AppTheme.colors.accent_error}; font-size: 12px; font-family: {AppTheme.fonts.mono};"
-        )
-        status_layout.addWidget(self._lost_label)
-
         status_layout.addStretch()
 
-        self._status_label = QLabel("UDP • 等待连接")
+        self._status_label = QLabel("未连接")
         self._status_label.setStyleSheet(
             f"color: {AppTheme.colors.foreground_muted}; font-size: 12px; font-family: {AppTheme.fonts.mono};"
         )
@@ -168,41 +191,73 @@ class ReceiverScreen(QWidget):
         layout.addWidget(status_bar)
 
         # 信号连接
-        self._udp_receiver.frame_received.connect(self._on_frame_received)
-        self._udp_receiver.state_changed.connect(self._on_state_changed)
-        self._udp_receiver.stats_changed.connect(self._on_stats_changed)
-        self._udp_receiver.error_occurred.connect(self._on_error)
+        self._manager.frame_received.connect(self._on_frame_received)
+        self._manager.state_changed.connect(self._on_state_changed)
+        self._manager.source_name_changed.connect(self._on_source_name_changed)
+        self._manager.error_occurred.connect(self._on_error)
+
+        # 初始化下拉框
+        self._refresh_source_combo()
+
+    def _refresh_source_combo(self) -> None:
+        self._source_combo.clear()
+        self._source_combo.addItem("本地摄像头", self.SOURCE_LOCAL)
+
+        for device in self._device_store.devices:
+            self._source_combo.addItem(device.name, device)
+
+        self._source_combo.addItem("手动输入 IP:端口", self.SOURCE_MANUAL)
+
+    def _on_source_changed(self, _index: int) -> None:
+        data = self._source_combo.currentData()
+        self._manual_frame.setVisible(data == self.SOURCE_MANUAL)
 
     def _on_connect(self) -> None:
-        ip = self._ip_input.text().strip()
-        port_text = self._port_input.text().strip()
-        if not ip:
-            QMessageBox.warning(self, "输入错误", "请输入设备 IP 地址")
-            return
-        try:
-            port = int(port_text) if port_text else 8080
-        except ValueError:
-            QMessageBox.warning(self, "输入错误", "端口号必须为数字")
-            return
+        data = self._source_combo.currentData()
 
-        self._udp_receiver.connect_to(ip, port)
+        if data == self.SOURCE_LOCAL:
+            self._manager.connect_local_camera(0)
+        elif data == self.SOURCE_MANUAL:
+            ip = self._ip_input.text().strip()
+            port_text = self._port_input.text().strip()
+            if not ip:
+                QMessageBox.warning(self, "输入错误", "请输入设备 IP 地址")
+                return
+            try:
+                port = int(port_text) if port_text else 8080
+            except ValueError:
+                QMessageBox.warning(self, "输入错误", "端口号必须为数字")
+                return
+            self._manager.connect_udp(ip, port)
+        elif isinstance(data, RemoteDevice):
+            self._manager.connect_saved_device(data)
 
     def _on_disconnect(self) -> None:
-        self._udp_receiver.disconnect()
-        self._status_label.setText("UDP • 已断开")
+        self._manager.disconnect()
         self._video.setText("等待连接")
         self._video.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def _on_frame_received(self, frame: np.ndarray) -> None:
         self._video.set_frame(frame)
+        self._frame_count += 1
+
+        now = time.time()
+        elapsed = now - self._last_fps_time
+        if elapsed >= 1.0:
+            self._fps = self._frame_count / elapsed
+            self._frame_count = 0
+            self._last_fps_time = now
+            self._fps_label.setText(f"FPS: {self._fps:.1f}")
+            self._frame_count_label.setText(f"帧数: {self._frame_count}")
 
     def _on_state_changed(self, state: str) -> None:
-        self._status_label.setText(f"UDP • {state}")
+        self._status_label.setText(state)
+        connected = state == "已连接"
+        self._connect_btn.setEnabled(not connected)
+        self._disconnect_btn.setEnabled(connected)
 
-    def _on_stats_changed(self, stats: ReceiverStats) -> None:
-        self._fps_label.setText(f"FPS: {stats.fps:.1f}")
-        self._frame_count_label.setText(f"帧数: {stats.frame_count}")
-        self._lost_label.setText(f"丢帧: {stats.lost_frames}")
+    def _on_source_name_changed(self, name: str) -> None:
+        self._status_label.setText(name)
 
     def _on_error(self, message: str) -> None:
         _log.error(message)

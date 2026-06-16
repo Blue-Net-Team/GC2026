@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 from loguru import logger
 
 from app.core.config_bridge import AppConfig, ColorConfig, ConfigBridge
-from app.core.udp_receiver import UdpReceiver
+from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 from detector.ColorDetect import TraditionalColorDetector
 
@@ -179,12 +179,12 @@ class ColorTunerScreen(QWidget):
     def __init__(
         self,
         config_bridge: ConfigBridge,
-        udp_receiver: UdpReceiver,
+        frame_source_manager: FrameSourceManager,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._config_bridge = config_bridge
-        self._udp_receiver = udp_receiver
+        self._frame_source_manager = frame_source_manager
         self._app_config = config_bridge.config
 
         self._current_color = "R"
@@ -206,7 +206,7 @@ class ColorTunerScreen(QWidget):
         self._build_ui()
 
         # 信号
-        self._udp_receiver.frame_received.connect(self._on_frame_received)
+        self._frame_source_manager.frame_received.connect(self._on_frame_received)
         self._preview_ready.connect(self._on_preview_ready)
         self._info_ready.connect(self._on_info_ready)
 

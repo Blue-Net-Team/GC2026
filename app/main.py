@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import QApplication
 from loguru import logger
 
 from app.core.config_bridge import ConfigBridge
-from app.core.udp_receiver import UdpReceiver
+from app.core.device_store import DeviceStore
+from app.core.frame_source_manager import FrameSourceManager
 from app.ui.main_window import MainWindow
 from app.ui.theme import AppTheme
 
@@ -43,9 +44,10 @@ def main(debug: bool = False) -> int:
     config_bridge = ConfigBridge("config.yaml")
     config_bridge.load()
 
-    udp_receiver = UdpReceiver()
+    device_store = DeviceStore("devices.json")
+    frame_source_manager = FrameSourceManager()
 
-    window = MainWindow(config_bridge, udp_receiver)
+    window = MainWindow(config_bridge, frame_source_manager, device_store)
     window.show()
 
     with loop:

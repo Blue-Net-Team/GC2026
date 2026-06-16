@@ -94,7 +94,7 @@ QLabel {{
 QPushButton {{
     background-color: {c.accent_primary};
     color: {c.foreground_primary};
-    border: 1px solid transparent;
+    border: 1px solid {c.accent_primary};
     border-radius: {m.radius_md}px;
     padding: 10px 16px;
     font-weight: 500;
@@ -107,24 +107,31 @@ QPushButton:hover {{
 
 QPushButton:pressed {{
     background-color: {cls._darken(c.accent_primary, 10)};
+    border: 1px solid {cls._darken(c.accent_primary, 10)};
 }}
 
 QPushButton:disabled {{
     background-color: {c.surface_elevated};
     color: {c.foreground_muted};
-    border: 1px solid transparent;
+    border: 1px solid {c.surface_elevated};
 }}
 
 QPushButton#secondary {{
     background-color: transparent;
-    color: {c.foreground_secondary};
-    border: 1px solid {c.border_primary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.accent_primary};
 }}
 
 QPushButton#secondary:hover {{
     background-color: {c.surface_tertiary};
     color: {c.foreground_primary};
     border: 1px solid {c.accent_primary};
+}}
+
+QPushButton#secondary:disabled {{
+    background-color: transparent;
+    color: {c.foreground_muted};
+    border: 1px solid {c.border_primary};
 }}
 
 QComboBox {{

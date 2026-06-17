@@ -249,17 +249,20 @@ class MainWindow(QMainWindow):
         from app.ui.screens.receiver_screen import ReceiverScreen
         from app.ui.screens.color_tuner_screen import ColorTunerScreen
         from app.ui.screens.color_ring_tuner_screen import ColorRingTunerScreen
+        from app.ui.screens.log_screen import LogScreen
 
         self._receiver_screen = ReceiverScreen(frame_source_manager, device_store)
         self._color_screen = ColorTunerScreen(config_bridge, frame_source_manager)
         self._color_ring_screen = ColorRingTunerScreen(config_bridge, frame_source_manager)
+        self._log_screen = LogScreen(device_store)
 
         self._stack.addWidget(self._receiver_screen)
         self._stack.addWidget(self._color_screen)
         self._stack.addWidget(self._color_ring_screen)
+        self._stack.addWidget(self._log_screen)
 
         # 其他页面先用占位
-        for title in ("日志", "配置", "服务"):
+        for title in ("配置", "服务"):
             placeholder = QLabel(f"{title} 页面开发中")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet(

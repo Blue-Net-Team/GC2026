@@ -277,6 +277,17 @@ QListWidget::item:hover {{
     background-color: {c.surface_tertiary};
 }}
 
+QPlainTextEdit {{
+    background-color: {c.surface_secondary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.border_primary};
+    border-radius: {m.radius_md}px;
+    padding: 12px;
+    font-family: {f.mono};
+    font-size: 13px;
+    selection-background-color: {c.accent_primary};
+}}
+
 QScrollBar:vertical {{
     background-color: {c.surface_secondary};
     width: 8px;

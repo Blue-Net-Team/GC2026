@@ -15,6 +15,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from loguru import logger
 
 _log = logger.bind(module="DeviceStore")
@@ -59,10 +60,13 @@ DEFAULT_DEVICES: list[RemoteDevice] = [
 ]
 
 
-class DeviceStore:
+class DeviceStore(QObject):
     """设备列表本地存储"""
 
+    devices_changed = pyqtSignal()
+
     def __init__(self, path: Optional[str | Path] = None) -> None:
+        super().__init__()
         self.path = Path(path) if path else Path("devices.json")
         self._devices: list[RemoteDevice] = []
         self.load()
@@ -90,6 +94,7 @@ class DeviceStore:
             _log.error(f"加载设备列表失败: {e}")
             self._devices = copy.deepcopy(DEFAULT_DEVICES)
 
+        self.devices_changed.emit()
         return self._devices
 
     def save(self) -> bool:
@@ -102,6 +107,7 @@ class DeviceStore:
                     ensure_ascii=False,
                     indent=2,
                 )
+            self.devices_changed.emit()
             return True
         except Exception as e:
             _log.error(f"保存设备列表失败: {e}")

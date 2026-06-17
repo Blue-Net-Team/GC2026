@@ -201,6 +201,7 @@ class ReceiverScreen(QWidget):
         self._manager.state_changed.connect(self._on_state_changed)
         self._manager.source_name_changed.connect(self._on_source_name_changed)
         self._manager.error_occurred.connect(self._on_error)
+        self._device_store.devices_changed.connect(self._refresh_device_combo)
 
         # 初始化下拉框
         self._refresh_mode_combo()

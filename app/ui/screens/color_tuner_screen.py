@@ -150,9 +150,17 @@ class ParamSlider(QWidget):
         self._slider.setRange(min_val, max_val)
         self._slider.setTracking(False)
         self._slider.valueChanged.connect(self._on_slider_changed)
+        self._slider.sliderMoved.connect(self._on_slider_moved)
         layout.addWidget(self._slider)
 
+    def _on_slider_moved(self, value: int) -> None:
+        """拖动过程中实时更新数值框，但不触发保存/预览"""
+        self._spin.blockSignals(True)
+        self._spin.setValue(value)
+        self._spin.blockSignals(False)
+
     def _on_slider_changed(self, value: int) -> None:
+        """释放滑条时同步数值框并触发保存/预览"""
         self._spin.blockSignals(True)
         self._spin.setValue(value)
         self._spin.blockSignals(False)

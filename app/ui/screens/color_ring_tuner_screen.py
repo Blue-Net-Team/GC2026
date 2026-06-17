@@ -143,6 +143,7 @@ class AdvancedParamSlider(QWidget):
         self._slider.setPageStep(slider_step * 5)
         self._slider.setTracking(False)
         self._slider.valueChanged.connect(self._on_slider_changed)
+        self._slider.sliderMoved.connect(self._on_slider_moved)
         layout.addWidget(self._slider)
 
     def _to_real(self, slider_value: int) -> float:
@@ -171,7 +172,15 @@ class AdvancedParamSlider(QWidget):
     def _spin_value(self) -> float:
         return float(self._spin.value())
 
+    def _on_slider_moved(self, value: int) -> None:
+        """拖动过程中实时更新数值框，但不触发保存/预览"""
+        real = self._to_real(value)
+        self._spin.blockSignals(True)
+        self._set_spin_value(real)
+        self._spin.blockSignals(False)
+
     def _on_slider_changed(self, value: int) -> None:
+        """释放滑条时同步数值框并触发保存/预览"""
         real = self._to_real(value)
         self._spin.blockSignals(True)
         self._set_spin_value(real)

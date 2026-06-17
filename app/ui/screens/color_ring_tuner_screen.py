@@ -203,10 +203,10 @@ class AdvancedParamSlider(QWidget):
                 v = max(1, v + 1)
             value = float(v)
         self._spin.blockSignals(True)
-        self._set_spin_value(value)
-        self._spin.blockSignals(False)
         self._slider.blockSignals(True)
+        self._set_spin_value(value)
         self._slider.setValue(self._to_slider(value))
+        self._spin.blockSignals(False)
         self._slider.blockSignals(False)
 
 
@@ -289,7 +289,7 @@ class ColorRingTunerScreen(QWidget):
             [
                 ("erode_iter", "腐蚀迭代", 0, 10, 0, 1, False),
                 ("dilate_kernel_size", "膨胀核大小", 3, 15, 0, 2, True),
-                ("clahe_clip_limit", "CLAHE 限制", 0.5, 5.0, 1, 0.1, False),
+                ("clahe_clip_limit", "CLAHE 限制", 0.5, 10.0, 1, 0.1, False),
                 ("clahe_tile_size", "CLAHE 网格", 2, 16, 0, 1, False),
             ]
         )
@@ -297,12 +297,12 @@ class ColorRingTunerScreen(QWidget):
 
         hough_tab = self._build_group_tab(
             [
-                ("hough_dp", "霍夫分辨率", 0.5, 2.0, 1, 0.1, False),
-                ("hough_min_dist", "圆心最小距", 10, 200, 0, 1, False),
-                ("hough_param1", "Canny 阈值", 10, 200, 0, 1, False),
-                ("hough_param2", "累加器阈值", 10, 200, 0, 1, False),
-                ("min_radius", "最小半径", 10, 300, 0, 1, False),
-                ("max_radius", "最大半径", 50, 500, 0, 1, False),
+                ("hough_dp", "霍夫分辨率", 0.1, 3.0, 1, 0.1, False),
+                ("hough_min_dist", "圆心最小距", 0, 200, 0, 1, False),
+                ("hough_param1", "Canny 阈值", 0, 255, 0, 1, False),
+                ("hough_param2", "累加器阈值", 1, 255, 0, 1, False),
+                ("min_radius", "最小半径", 0, 900, 0, 1, False),
+                ("max_radius", "最大半径", 0, 900, 0, 1, False),
                 ("expected_circles", "期望圆数", 1, 10, 0, 1, False),
             ]
         )
@@ -311,9 +311,9 @@ class ColorRingTunerScreen(QWidget):
         postprocess_tab = self._build_group_tab(
             [
                 ("morph_kernel_size", "形态学核", 3, 15, 0, 2, True),
-                ("gaussian_kernel_size", "高斯核", 3, 21, 0, 2, True),
-                ("gaussian_sigma", "高斯 sigma", 0.5, 5.0, 1, 0.1, False),
-                ("alpha", "对比度增强", 1.0, 10.0, 1, 0.1, False),
+                ("gaussian_kernel_size", "高斯核", 3, 15, 0, 2, True),
+                ("gaussian_sigma", "高斯 sigma", 0.1, 5.0, 1, 0.1, False),
+                ("alpha", "对比度增强", 0.1, 10.0, 1, 0.1, False),
                 ("threshold_value", "二值化阈值", 0, 255, 0, 1, False),
             ]
         )

@@ -168,7 +168,12 @@ class ParamSlider(QWidget):
         return self._slider.value()
 
     def set_value(self, value: int) -> None:
+        self._slider.blockSignals(True)
+        self._spin.blockSignals(True)
         self._slider.setValue(value)
+        self._spin.setValue(value)
+        self._slider.blockSignals(False)
+        self._spin.blockSignals(False)
 
 
 class ColorTunerScreen(QWidget):
@@ -262,12 +267,14 @@ class ColorTunerScreen(QWidget):
 
         self._sliders: dict[str, ParamSlider] = {}
         slider_defs = [
-            ("centre", "色相中心", 0, 179),
-            ("error", "色相容差", 0, 30),
+            ("centre", "色相中心", 0, 180),
+            ("error", "色相容差", 0, 40),
             ("L_S", "饱和度下限", 0, 255),
             ("U_S", "饱和度上限", 0, 255),
             ("L_V", "明度下限", 0, 255),
             ("U_V", "明度上限", 0, 255),
+            ("min_area", "最小面积", 0, 30000),
+            ("max_area", "最大面积", 0, 30000),
         ]
         for key, label, min_v, max_v in slider_defs:
             slider = ParamSlider(label, min_v, max_v)
@@ -332,6 +339,8 @@ class ColorTunerScreen(QWidget):
             cfg = self._app_config.color[color]
             detector = self._detectors[color]
             detector.color_threshold[color] = cfg.to_dict()
+            detector.min_material_area = self._app_config.min_material_area
+            detector.max_material_area = self._app_config.max_material_area
             detector.update_threshold(color)
 
     def _load_color_values(self, color: str) -> None:
@@ -342,6 +351,8 @@ class ColorTunerScreen(QWidget):
         self._sliders["U_S"].set_value(cfg.U_S)
         self._sliders["L_V"].set_value(cfg.L_V)
         self._sliders["U_V"].set_value(cfg.U_V)
+        self._sliders["min_area"].set_value(self._app_config.min_material_area // 10)
+        self._sliders["max_area"].set_value(self._app_config.max_material_area // 10)
 
     def _store_color_values(self, color: str) -> None:
         cfg = self._app_config.color[color]
@@ -351,9 +362,13 @@ class ColorTunerScreen(QWidget):
         cfg.U_S = self._sliders["U_S"].value()
         cfg.L_V = self._sliders["L_V"].value()
         cfg.U_V = self._sliders["U_V"].value()
+        self._app_config.min_material_area = self._sliders["min_area"].value() * 10
+        self._app_config.max_material_area = self._sliders["max_area"].value() * 10
 
         detector = self._detectors[color]
         detector.color_threshold[color] = cfg.to_dict()
+        detector.min_material_area = self._app_config.min_material_area
+        detector.max_material_area = self._app_config.max_material_area
         detector.update_threshold(color)
 
     def _on_tab_changed(self, index: int) -> None:

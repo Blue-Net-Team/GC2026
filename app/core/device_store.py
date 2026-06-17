@@ -3,7 +3,7 @@ Copyright (C) 2025 IVEN-CN(He Yunfeng)
 
 GC2026 桌面调参应用 - 设备列表存储
 ====
-管理已保存的远程设备（名称 + IP + 端口），使用本地 JSON 文件持久化。
+管理已保存的远程设备（名称 + IP + 端口 + SSH 连接信息），使用本地 JSON 文件持久化。
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ class RemoteDevice:
     ip: str
     port: int = 8080
     id: str = ""
+    ssh_username: str = "lckfb"
+    ssh_password: str = ""
+    ssh_port: int = 22
+    ssh_key_path: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -43,6 +47,10 @@ class RemoteDevice:
             name=data.get("name", "未命名设备"),
             ip=data.get("ip", "127.0.0.1"),
             port=int(data.get("port", 8080)),
+            ssh_username=data.get("ssh_username", "lckfb"),
+            ssh_password=data.get("ssh_password", ""),
+            ssh_port=int(data.get("ssh_port", 22)),
+            ssh_key_path=data.get("ssh_key_path", ""),
         )
 
 

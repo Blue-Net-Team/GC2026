@@ -250,25 +250,27 @@ class MainWindow(QMainWindow):
         from app.ui.screens.color_tuner_screen import ColorTunerScreen
         from app.ui.screens.color_ring_tuner_screen import ColorRingTunerScreen
         from app.ui.screens.log_screen import LogScreen
+        from app.ui.screens.config_screen import ConfigScreen
 
         self._receiver_screen = ReceiverScreen(frame_source_manager, device_store)
         self._color_screen = ColorTunerScreen(config_bridge, frame_source_manager)
         self._color_ring_screen = ColorRingTunerScreen(config_bridge, frame_source_manager)
         self._log_screen = LogScreen(device_store)
+        self._config_screen = ConfigScreen(device_store)
 
         self._stack.addWidget(self._receiver_screen)
         self._stack.addWidget(self._color_screen)
         self._stack.addWidget(self._color_ring_screen)
         self._stack.addWidget(self._log_screen)
+        self._stack.addWidget(self._config_screen)
 
-        # 其他页面先用占位
-        for title in ("配置", "服务"):
-            placeholder = QLabel(f"{title} 页面开发中")
-            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            placeholder.setStyleSheet(
-                f"color: {AppTheme.colors.foreground_secondary}; font-size: 18px;"
-            )
-            self._stack.addWidget(placeholder)
+        # 服务页面先用占位
+        placeholder = QLabel("服务 页面开发中")
+        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder.setStyleSheet(
+            f"color: {AppTheme.colors.foreground_secondary}; font-size: 18px;"
+        )
+        self._stack.addWidget(placeholder)
 
         self._sidebar.set_active_screen(0)
 
@@ -278,6 +280,8 @@ class MainWindow(QMainWindow):
 
     def _on_screen_changed(self, index: int) -> None:
         self._stack.setCurrentIndex(index)
+        if index == 4:
+            self._config_screen.refresh()
 
     def _on_source_state_changed(self, state: str) -> None:
         name = self._frame_source_manager.current_name

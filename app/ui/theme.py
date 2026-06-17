@@ -222,12 +222,90 @@ QSlider::handle:horizontal:hover {{
     background-color: {c.accent_secondary};
 }}
 
-QSpinBox {{
+QSpinBox,
+QDoubleSpinBox {{
     background-color: {c.surface_tertiary};
     color: {c.foreground_primary};
     border: 1px solid {c.border_primary};
     border-radius: {m.radius_sm}px;
     padding: 4px 8px;
+}}
+
+QSpinBox:hover,
+QDoubleSpinBox:hover {{
+    background-color: {c.surface_elevated};
+    border: 1px solid {c.accent_primary};
+}}
+
+QSpinBox:focus,
+QDoubleSpinBox:focus {{
+    border: 1px solid {c.accent_primary};
+}}
+
+QSpinBox::up-button,
+QDoubleSpinBox::up-button,
+QSpinBox::down-button,
+QDoubleSpinBox::down-button {{
+    width: 16px;
+    background-color: {c.surface_elevated};
+    border: 1px solid {c.border_primary};
+}}
+
+QSpinBox::up-button:hover,
+QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover,
+QDoubleSpinBox::down-button:hover {{
+    background-color: {c.accent_primary};
+}}
+
+QGroupBox {{
+    background-color: {c.surface_secondary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.border_primary};
+    border-radius: {m.radius_md}px;
+    padding: {m.spacing_md}px;
+    margin-top: {m.spacing_sm}px;
+    font-weight: 600;
+}}
+
+QGroupBox::title {{
+    color: {c.foreground_primary};
+    subcontrol-origin: margin;
+    left: {m.spacing_sm}px;
+    padding: 0 {m.spacing_xs}px;
+}}
+
+QTableWidget {{
+    background-color: {c.surface_secondary};
+    color: {c.foreground_primary};
+    border: 1px solid {c.border_primary};
+    border-radius: {m.radius_md}px;
+    gridline-color: {c.border_subtle};
+    outline: none;
+}}
+
+QHeaderView::section {{
+    background-color: {c.surface_tertiary};
+    color: {c.foreground_primary};
+    padding: 8px 12px;
+    border: none;
+    border-bottom: 1px solid {c.border_primary};
+    font-weight: 600;
+}}
+
+QTableWidget::item {{
+    color: {c.foreground_secondary};
+    padding: 8px 12px;
+    border: none;
+}}
+
+QTableWidget::item:selected {{
+    background-color: {c.surface_tertiary};
+    color: {c.foreground_primary};
+}}
+
+QTableWidget::item:hover {{
+    background-color: {c.surface_tertiary};
 }}
 
 QTabWidget::pane {{

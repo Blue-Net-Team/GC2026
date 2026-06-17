@@ -172,6 +172,7 @@ class LogScreen(QWidget):
         self._filter_level = "全部"
 
         self._build_ui()
+        self._device_store.devices_changed.connect(self._refresh_device_combo)
         self._refresh_device_combo()
 
     def _build_ui(self) -> None:

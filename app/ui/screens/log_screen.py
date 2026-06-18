@@ -112,11 +112,14 @@ class SshLogWorker(QThread):
             if transport is None:
                 raise RuntimeError("无法获取 SSH transport")
 
+            # 预先检查服务状态，避免 journalctl 空等
+            self._check_service_state(transport)
+
             self._channel = transport.open_session()
             self._channel.get_pty(width=200, height=80)
             self._channel.exec_command(self._command)
 
-            stdout = self._channel.makefile("r", encoding="utf-8", errors="replace")
+            stdout = self._channel.makefile("r")
             while self._running:
                 try:
                     line = stdout.readline()
@@ -124,6 +127,8 @@ class SshLogWorker(QThread):
                     break
                 if not line:
                     break
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
                 self.log_line.emit(line.rstrip("\n"))
 
             self.state_changed.emit("已断开")
@@ -135,6 +140,45 @@ class SshLogWorker(QThread):
             self.state_changed.emit("连接失败")
         finally:
             self._close()
+
+    def _check_service_state(self, transport: paramiko.Transport) -> None:
+        """连接成功后先检查目标服务是否存在/运行，再决定是否启动 journalctl。"""
+        try:
+            check_channel = transport.open_session()
+            check_channel.exec_command(
+                "systemctl show run-main-auto.service -p LoadState -p ActiveState -p SubState --no-pager"
+            )
+            stdout = check_channel.makefile("r")
+            output = stdout.read() if hasattr(stdout, "read") else ""
+            if isinstance(output, bytes):
+                output = output.decode("utf-8", errors="replace")
+            check_channel.close()
+
+            state: dict[str, str] = {}
+            for line in output.splitlines():
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    state[key.strip()] = value.strip()
+
+            load_state = state.get("LoadState", "")
+            active_state = state.get("ActiveState", "")
+            sub_state = state.get("SubState", "")
+
+            if load_state and load_state != "loaded":
+                raise RuntimeError(
+                    f"服务 run-main-auto.service 不存在（LoadState={load_state}）"
+                )
+
+            if active_state and active_state != "active":
+                message = f"服务当前未运行（{active_state}/{sub_state}），仅显示历史日志（如有）"
+                _log.warning(message)
+                self.error_occurred.emit(message)
+                self.state_changed.emit("服务未运行")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            # 预检查失败不影响继续尝试 journalctl
+            _log.debug(f"服务状态预检查失败: {e}")
 
     def stop(self) -> None:
         self._running = False

@@ -8,16 +8,17 @@ GC2026 桌面调参应用 - 主窗口
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QPushButton,
     QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
@@ -25,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import AppConfig, ConfigBridge
+from app.core.config_bridge import ConfigBridge
 from app.core.device_store import DeviceStore
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
@@ -42,17 +43,20 @@ class NavItem(QWidget):
         self,
         icon_text: str,
         label: str,
+        icon_path: Optional[str | Path] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._active = False
+        self._icon_text = icon_text
+        self._icon_path = Path(icon_path) if icon_path else None
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(14, 10, 14, 10)
         self._layout.setSpacing(12)
 
-        self._icon = QLabel(icon_text)
-        self._icon.setFont(QFont("Material Symbols Outlined", 20))
-        self._icon.setStyleSheet(f"color: {AppTheme.colors.foreground_muted};")
+        self._icon = QLabel()
+        self._icon.setFixedSize(24, 24)
+        self._set_icon()
 
         self._label = QLabel(label)
         self._label.setStyleSheet(f"color: {AppTheme.colors.foreground_secondary};")
@@ -66,6 +70,51 @@ class NavItem(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.set_active(False)
 
+    def _set_icon(self) -> None:
+        if self._icon_path is not None and self._icon_path.exists():
+            base = self._load_icon(self._icon_path)
+            self._icon_normal = self._tint_icon(base, AppTheme.colors.foreground_muted)
+            self._icon_active = self._tint_icon(base, AppTheme.colors.foreground_primary)
+            self._icon.setPixmap(self._icon_normal)
+            self._icon.setStyleSheet("")
+        else:
+            self._icon_normal = None
+            self._icon_active = None
+            self._icon.setText(self._icon_text)
+            self._icon.setFont(QFont("Material Symbols Outlined", 20))
+            self._icon.setStyleSheet(f"color: {AppTheme.colors.foreground_muted};")
+
+    def _load_icon(self, path: Path) -> QPixmap:
+        suffix = path.suffix.lower()
+        target = QSize(24, 24)
+        if suffix == ".svg":
+            pixmap = QPixmap(target)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            renderer = QSvgRenderer(str(path))
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            painter.end()
+            return pixmap
+        pixmap = QPixmap(str(path))
+        if pixmap.isNull():
+            return pixmap
+        return pixmap.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+    def _tint_icon(self, pixmap: QPixmap, color: str) -> QPixmap:
+        tinted = QPixmap(pixmap.size())
+        tinted.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(tinted)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(tinted.rect(), QColor(color))
+        painter.end()
+        return tinted
+
     def set_active(self, active: bool) -> None:
         self._active = active
         c = AppTheme.colors
@@ -73,13 +122,19 @@ class NavItem(QWidget):
             self.setStyleSheet(
                 f"background-color: {c.surface_tertiary}; border-radius: {AppTheme.metrics.radius_md}px;"
             )
-            self._icon.setStyleSheet(f"color: {c.foreground_primary};")
+            if self._icon_active is not None:
+                self._icon.setPixmap(self._icon_active)
+            else:
+                self._icon.setStyleSheet(f"color: {c.foreground_primary};")
             self._label.setStyleSheet(f"color: {c.foreground_primary};")
         else:
             self.setStyleSheet(
                 f"background-color: transparent; border-radius: {AppTheme.metrics.radius_md}px;"
             )
-            self._icon.setStyleSheet(f"color: {c.foreground_muted};")
+            if self._icon_normal is not None:
+                self._icon.setPixmap(self._icon_normal)
+            else:
+                self._icon.setStyleSheet(f"color: {c.foreground_muted};")
             self._label.setStyleSheet(f"color: {c.foreground_secondary};")
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -132,17 +187,18 @@ class Sidebar(QWidget):
 
         # 导航项
         self._nav_items: list[NavItem] = []
+        icon_dir = Path(__file__).parent.parent / "resources" / "icons"
         nav_data = [
-            ("videocam", "图传接收"),
-            ("palette", "颜色调参"),
-            ("donut_large", "色环调参"),
-            ("article", "日志"),
-            ("settings", "配置"),
-            ("build", "服务"),
+            ("videocam", "图传接收", icon_dir / "图传.svg"),
+            ("palette", "颜色调参", icon_dir / "RGB.svg"),
+            ("donut_large", "色环调参", icon_dir / "圆环.svg"),
+            ("article", "日志", icon_dir / "日志.svg"),
+            ("settings", "配置", icon_dir / "配置管理.svg"),
+            ("build", "服务", icon_dir / "服务.svg"),
         ]
 
-        for idx, (icon, label) in enumerate(nav_data):
-            item = NavItem(icon, label)
+        for idx, (icon, label, icon_path) in enumerate(nav_data):
+            item = NavItem(icon, label, icon_path=icon_path)
             item.clicked.connect(lambda checked=False, i=idx: self._on_item_clicked(i))
             self._nav_items.append(item)
             layout.addWidget(item)

@@ -39,9 +39,10 @@ uv run main
 
 | 命令 | 说明 |
 |------|------|
-| `uv sync` | 安装依赖（根据 `uv.lock`） |
+| `uv sync` | 安装基础依赖（嵌入式主程序） |
+| `uv sync --extra app` | 额外安装桌面应用依赖（PyQt6 等） |
 | `uv sync --extra test` | 安装包含测试依赖 |
-| `uv run app` | 启动桌面调参应用（PyQt6） |
+| `uv run --extra app app` | 启动桌面调参应用（PyQt6） |
 | `uv run main` | 启动嵌入式主程序（三个协程并行） |
 | `uv run setup color --capid 0` | 颜色阈值调试工具 |
 | `uv run setup colorring --capid 0` | 色环检测阈值调试工具 |

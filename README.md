@@ -77,10 +77,14 @@ cd GC2026
 
 ### 2. 创建虚拟环境并安装依赖
 
-本项目已配置好 `pyproject.toml` 和 `uv.lock`，使用 uv 一键安装所有依赖：
+本项目已配置好 `pyproject.toml` 和 `uv.lock`，使用 uv 一键安装依赖：
 
 ```bash
+# 仅安装嵌入式主程序所需依赖
 uv sync
+
+# 如果要开发/运行桌面调参应用，需要额外安装 app 依赖
+uv sync --extra app
 ```
 
 该命令会自动：
@@ -89,10 +93,11 @@ uv sync
 - 创建项目虚拟环境
 - 根据 `uv.lock` 安装所有依赖包
 
-> 如果你需要开发测试依赖，可以加上 `--extra test`：
+> 其他可选依赖：
 >
 > ```bash
-> uv sync --extra test
+> uv sync --extra test   # 测试依赖
+> uv sync --extra board  # 嵌入式 GPIO 依赖
 > ```
 
 ### 3. 激活虚拟环境
@@ -156,7 +161,8 @@ GC2026/
 启动 PyQt6 桌面调参应用，提供 UDP 图传接收、颜色/色环参数调节、配置管理、SSH 服务管理和日志查看等功能。
 
 ```bash
-uv run app
+# 首次运行前确保已安装 app 依赖：uv sync --extra app
+uv run --extra app app
 ```
 
 ### 2. `uv run main` — 嵌入式主程序

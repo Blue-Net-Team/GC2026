@@ -28,13 +28,14 @@ ColorRingDetector类
         创建用于调整检测参数的滑动条窗口
     - `__callback(self, x)`:
         滑动条回调函数，用于更新检测参数
+    - `binarization(self, _img)`:
+        对输入图像进行色环检测前的预处理，返回单通道图像
+    - `get_circles(self, binary)`:
+        在预处理后的图像上运行霍夫圆检测
     - `detect(self, _img)`:
-        检测图像中的色环
-
-        参数:
-            - `_img (numpy.ndarray)`: 需要检测的图像
-        返回:
-            `tuple`: 三个色环的中心坐标列表 [(x1,y1), (x2,y2), (x3,y3)]，如果没有检测到则返回 None
+        检测图像中的色环，返回圆心坐标和预处理图像
+    - `visualize(self, _img, circles, binary)`:
+        在原图上绘制检测圆并拼接二值化图，供调参窗口使用
     - `save_config(self, config_path)`:
         保存当前配置到指定的配置文件中
 
@@ -193,14 +194,15 @@ class ColorRingDetector(Detect):
         cv2.setTrackbarPos("max_radius", "Trackbar", self.max_radius)
         cv2.setTrackbarPos("expected_circles", "Trackbar", self.expected_circles)
 
-    async def detect(self, _img) -> tuple[list[tuple[int, int]] | None, cv2.typing.MatLike]:
+    async def binarization(self, _img: cv2.typing.MatLike) -> cv2.typing.MatLike:
         """
-        检测色环
+        色环二值化
         ----
-        通过腐蚀膨胀、CLAHE对比度增强、形态学梯度、多次高斯模糊后进行霍夫圆检测
+        对输入图像进行腐蚀、膨胀、CLAHE、形态学梯度、高斯模糊、对比度增强、
+        二值化、最终模糊等预处理，返回用于霍夫圆检测的单通道图像。
 
-        :param _img: 需要检测的图片
-        :return: 色环中心坐标列表 [(x1,y1), (x2,y2), (x3,y3)]，没识别到返回None，以及处理后的图像
+        :param _img: 需要处理的图片
+        :return: 预处理后的单通道图像（灰度/二值化图）
         """
         img = _img.copy()
 
@@ -213,7 +215,7 @@ class ColorRingDetector(Detect):
             clipLimit=self.clahe_clip_limit,
             tileGridSize=(self.clahe_tile_size, self.clahe_tile_size)
         )
-        clahed = clahe.apply(gray)
+        clahe.apply(gray)
 
         gradient = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, self.morph_kernel)
 
@@ -239,8 +241,21 @@ class ColorRingDetector(Detect):
             self.gaussian_sigma
         )
 
+        return blurred3
+
+    async def get_circles(
+        self, binary: cv2.typing.MatLike
+    ) -> list[tuple[int, int, int]] | None:
+        """
+        霍夫圆检测
+        ----
+        在 binarization() 返回的单通道图像上运行霍夫圆检测。
+
+        :param binary: 二值化/预处理后的单通道图像
+        :return: 检测到的圆列表 [(x, y, r), ...]，未检测到返回 None
+        """
         circles = cv2.HoughCircles(
-            blurred3,
+            binary,
             cv2.HOUGH_GRADIENT,
             self.hough_dp,
             self.hough_min_dist,
@@ -250,43 +265,72 @@ class ColorRingDetector(Detect):
             maxRadius=self.max_radius
         )
 
+        if circles is None:
+            return None
+
+        circles = np.uint16(np.around(circles))
+        circle_list = sorted(circles[0], key=lambda x: x[2], reverse=True)
+        return [(int(x), int(y), int(r)) for x, y, r in circle_list]
+
+    async def detect(
+        self, _img: cv2.typing.MatLike
+    ) -> tuple[list[tuple[int, int]] | None, cv2.typing.MatLike]:
+        """
+        检测色环
+        ----
+        组合 binarization() 与 get_circles()，返回圆心坐标和预处理图像。
+        不在原图上绘制任何标记，由调用方决定如何可视化。
+
+        :param _img: 需要检测的图片
+        :return: (圆心坐标列表 [(x1,y1), ...], 预处理后的单通道图像)
+                 未检测到圆时第一个元素为 None
+        """
+        binary = await self.binarization(_img)
+        circles = await self.get_circles(binary)
 
         if circles is not None:
-            circles = np.uint16(np.around(circles))
-            circle_list = sorted(circles[0], key=lambda x: x[2], reverse=True)
+            centers = [(x, y) for x, y, r in circles]
+            return centers, binary
 
-            result = []
-            for circle in circle_list:
-                x, y, r = circle
-                result.append((int(x), int(y)))
-                cv2.circle(_img, (int(x), int(y)), int(r), (0, 0, 255), 2)
-                cv2.circle(_img, (int(x), int(y)), 2, (255, 0, 0), 2)
+        return None, binary
 
-            res_img = np.vstack([
-                _img,
-                cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR),
-            ])
-            return result, res_img
+    def visualize(
+        self,
+        _img: cv2.typing.MatLike,
+        circles: list[tuple[int, int, int]] | None = None,
+        binary: cv2.typing.MatLike | None = None,
+    ) -> cv2.typing.MatLike:
+        """
+        可视化色环检测结果
+        ----
+        在原图上绘制检测圆，并与二值化图纵向拼接。供独立调参窗口使用。
 
-        res_img = np.vstack([
-            _img,
-            cv2.cvtColor(blurred3, cv2.COLOR_GRAY2BGR),
-        ])
-        return None, res_img
+        :param _img: 原始图像
+        :param circles: 检测到的圆列表 [(x, y, r), ...]，为 None 时不画圆
+        :param binary: 预处理后的单通道图像，为 None 时使用全黑占位图
+        :return: 拼接后的可视化图像
+        """
+        output = _img.copy()
+        if circles is not None:
+            for x, y, r in circles:
+                cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
+                cv2.circle(output, (int(x), int(y)), 2, (255, 0, 0), 2)
+
+        if binary is None:
+            binary = np.zeros((_img.shape[0], _img.shape[1]), dtype=np.uint8)
+
+        vis_binary = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+        return np.vstack([output, vis_binary])
 
     def save_config(self, config_path: str):
         """
         保存配置
         ----
         Args:
-            config_path (str): 配置文件路径
+            config_path (str): 保存路径
         """
         circle_type = "color_ring"
-
-        try:
-            config = super().load_config(config_path)
-        except:
-            config = {}
+        config = super().load_config(config_path)
 
         config[circle_type] = {
             "erode_iter": self.erode_iter,
@@ -314,9 +358,9 @@ class ColorRingDetector(Detect):
         加载配置
         ----
         Args:
-            config (str|dict): 配置文件路径或配置字典
-        Returns:
-            str: 错误信息
+            config(str|dict): 配置文件信息
+        Return:
+            res_str(str): 错误信息
         """
         circle_type = "color_ring"
 

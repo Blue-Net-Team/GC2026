@@ -32,48 +32,36 @@ class Applications:
         :return: 物料位置的坐标（x, y）, 处理后的图像（绘制轮廓）
         """
         # 颜色过滤
-        self.colorDetector.update_range(color_label)        # 更新颜色范围
+        self.colorDetector.update_range(color_label)
         filtered_img = await self.colorDetector.binarization(img)
-        # 面积排序
-        contours, _ = cv2.findContours(filtered_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
-        
-        # 取最大面积
-        max_contour = contours[0]
-        # 色块中心点
-        center = cv2.moments(max_contour)
-        
-        # 在原图上绘制外接矩形框
-        x, y, w, h = cv2.boundingRect(max_contour)
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        pos = await self.colorDetector.get_color_position(filtered_img)
+        draw_img = self.colorDetector.visualize(img, filtered_img, pos)
 
-        # 上下拼接：上侧原图（带框），下侧二值化图
-        draw_img = np.vstack([
-            img,
-            cv2.cvtColor(filtered_img, cv2.COLOR_GRAY2BGR),
-        ])
-
-        if center["m00"] == 0:
-            _log.warning("未检测到物料中心点")
+        if pos is None:
+            _log.warning("未检测到物料位置")
             return None, draw_img
 
-        cx = int(center["m10"] / center["m00"])
-        cy = int(center["m01"] / center["m00"])
+        cx, cy, w, h = pos
         _log.info(f"检测到物料中心点: ({cx}, {cy})")
         return (cx, cy), draw_img
         
     async def detect_circle(self, img: cv2.typing.MatLike, label=None):
         """
         检测图片中的圆位置
+        ----
+        :return: 圆心坐标 (x, y), 处理后的图像（原图+识别圆 与 二值化图拼接）
         """
         # 圆检测
-        res, res_img = await self.colorRingDetector.detect(img)
-        if res:
-            _log.info(f"检测到圆位置: {res[0]}")
-            return res[0], res_img
+        centers, binary = await self.colorRingDetector.detect(img)
+        circles = await self.colorRingDetector.get_circles(binary)
+        draw_img = self.colorRingDetector.visualize(img, circles, binary)
+
+        if centers:
+            _log.info(f"检测到圆位置: {centers[0]}")
+            return centers[0], draw_img
         else:
             _log.warning("未检测到圆位置")
-            return None, res_img
+            return None, draw_img
     
     def tuple2str(self, _tuple: tuple|None) -> str:
         """

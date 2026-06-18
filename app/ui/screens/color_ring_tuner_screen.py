@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import AppConfig, ConfigBridge
+from app.core.config_bridge import ConfigBridge
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 from detector.ColorRingDetect import ColorRingDetector
@@ -396,11 +396,6 @@ class ColorRingTunerScreen(QWidget):
         self._save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(self._save_btn)
 
-        self._deploy_btn = QPushButton("保存并部署")
-        self._deploy_btn.setObjectName("secondary")
-        self._deploy_btn.clicked.connect(self._on_deploy)
-        btn_layout.addWidget(self._deploy_btn)
-
         self._reset_btn = QPushButton("恢复默认")
         self._reset_btn.setObjectName("secondary")
         self._reset_btn.clicked.connect(self._on_reset)
@@ -513,11 +508,6 @@ class ColorRingTunerScreen(QWidget):
             self._info_label.setText("配置已保存到 config.yaml")
         else:
             self._info_label.setText("保存失败")
-
-    def _on_deploy(self) -> None:
-        self._store_values()
-        self._config_bridge.save()
-        self._info_label.setText("本地已保存，SSH 部署待实现")
 
     def _on_reset(self) -> None:
         self._config_bridge.reset_to_default()

@@ -33,6 +33,7 @@ class RemoteDevice:
     ssh_password: str = ""
     ssh_port: int = 22
     ssh_key_path: str = ""
+    code_path: str = "/userdata/code/GC2026"
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -52,6 +53,7 @@ class RemoteDevice:
             ssh_password=data.get("ssh_password", ""),
             ssh_port=int(data.get("ssh_port", 22)),
             ssh_key_path=data.get("ssh_key_path", ""),
+            code_path=data.get("code_path", "/userdata/code/GC2026"),
         )
 
 

@@ -8,10 +8,8 @@ GC2026 桌面调参应用 - 设备配置管理页面
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -88,6 +86,11 @@ class DeviceDialog(QDialog):
         self._ssh_port_spin.setValue(22)
         form.addRow("SSH 端口", self._ssh_port_spin)
 
+        self._code_path_edit = QLineEdit()
+        self._code_path_edit.setPlaceholderText("例如：/userdata/code/GC2026")
+        self._code_path_edit.setText("/userdata/code/GC2026")
+        form.addRow("代码路径", self._code_path_edit)
+
         key_layout = QHBoxLayout()
         key_layout.setSpacing(8)
         self._ssh_key_edit = QLineEdit()
@@ -116,6 +119,7 @@ class DeviceDialog(QDialog):
         self._ssh_username_edit.setText(device.ssh_username)
         self._ssh_password_edit.setText(device.ssh_password)
         self._ssh_port_spin.setValue(device.ssh_port)
+        self._code_path_edit.setText(device.code_path)
         self._ssh_key_edit.setText(device.ssh_key_path)
 
     def _on_browse_key(self) -> None:
@@ -148,6 +152,7 @@ class DeviceDialog(QDialog):
             ssh_password=self._ssh_password_edit.text(),
             ssh_port=self._ssh_port_spin.value(),
             ssh_key_path=self._ssh_key_edit.text().strip(),
+            code_path=self._code_path_edit.text().strip() or "/userdata/code/GC2026",
         )
 
 
@@ -189,16 +194,16 @@ class ConfigScreen(QWidget):
 
         # 设备表格
         self._device_table = QTableWidget()
-        self._device_table.setColumnCount(7)
+        self._device_table.setColumnCount(8)
         self._device_table.setHorizontalHeaderLabels(
-            ["名称", "IP", "图传端口", "SSH 用户名", "SSH 端口", "认证方式", "操作"]
+            ["名称", "IP", "图传端口", "SSH 用户名", "SSH 端口", "代码路径", "认证方式", "操作"]
         )
         header = self._device_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col in (1, 2, 3, 4, 5):
+        for col in (1, 2, 3, 4, 5, 6):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        self._device_table.setColumnWidth(6, 150)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
+        self._device_table.setColumnWidth(7, 150)
         self._device_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._device_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._device_table.verticalHeader().setVisible(False)
@@ -328,7 +333,8 @@ class ConfigScreen(QWidget):
             self._device_table.setItem(row, 2, QTableWidgetItem(str(device.port)))
             self._device_table.setItem(row, 3, QTableWidgetItem(device.ssh_username))
             self._device_table.setItem(row, 4, QTableWidgetItem(str(device.ssh_port)))
-            self._device_table.setItem(row, 5, QTableWidgetItem(self._auth_method(device)))
+            self._device_table.setItem(row, 5, QTableWidgetItem(device.code_path))
+            self._device_table.setItem(row, 6, QTableWidgetItem(self._auth_method(device)))
 
             op_widget = QWidget()
             op_widget.setAutoFillBackground(False)
@@ -350,6 +356,6 @@ class ConfigScreen(QWidget):
             op_layout.addWidget(edit_btn)
             op_layout.addWidget(del_btn)
             op_layout.addStretch()
-            self._device_table.setCellWidget(row, 6, op_widget)
+            self._device_table.setCellWidget(row, 7, op_widget)
 
         _log.debug("设备配置页面已刷新")

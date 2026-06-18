@@ -244,15 +244,17 @@ dependencies = [
     { name = "luma-oled" },
     { name = "numpy" },
     { name = "opencv-python" },
-    { name = "paramiko" },
     { name = "pillow" },
-    { name = "pyqt6" },
     { name = "pyserial" },
     { name = "pyyaml" },
-    { name = "qasync" },
 ]
 
 [package.optional-dependencies]
+app = [
+    { name = "paramiko" },
+    { name = "pyqt6" },
+    { name = "qasync" },
+]
 board = [
     { name = "python-periphery" },
 ]
@@ -270,17 +272,17 @@ requires-dist = [
     { name = "luma-oled", specifier = ">=3.15.0" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "opencv-python", specifier = ">=4.13.0.92" },
-    { name = "paramiko", specifier = ">=5.0.0" },
+    { name = "paramiko", marker = "extra == 'app'", specifier = ">=5.0.0" },
     { name = "pillow", specifier = ">=12.2.0" },
-    { name = "pyqt6", specifier = ">=6.11.0" },
+    { name = "pyqt6", marker = "extra == 'app'", specifier = ">=6.11.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1.3.0" },
     { name = "python-periphery", marker = "extra == 'board'", specifier = ">=2.4.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "qasync", specifier = ">=0.28.0" },
+    { name = "qasync", marker = "extra == 'app'", specifier = ">=0.28.0" },
 ]
-provides-extras = ["test", "board"]
+provides-extras = ["app", "test", "board"]
 
 [[package]]
 name = "iniconfig"

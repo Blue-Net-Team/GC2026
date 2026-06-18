@@ -237,7 +237,7 @@ class ServiceScreen(QWidget):
     def _load_descriptions(self) -> dict[str, str]:
         descriptions: dict[str, str] = {}
         for service in _SERVICES:
-            path = Path("run_auto") / f"{service}.service"
+            path = Path("run_auto") / service
             description = ""
             try:
                 if path.exists():
@@ -461,13 +461,13 @@ class ServiceScreen(QWidget):
             return
         device, password = dev
 
-        local_path = Path("run_auto") / f"{service}.service"
+        local_path = Path("run_auto") / service
         if not local_path.exists():
             QMessageBox.critical(
                 self,
                 "缺少服务文件",
                 f"本地未找到服务文件：{local_path}\n\n"
-                f"请在项目根目录维护 run_auto/{service}.service 后再试。",
+                f"请在项目根目录维护 run_auto/{service} 后再试。",
             )
             return
 

@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -574,7 +573,7 @@ class ServiceScreen(QWidget):
             )
             layout.addWidget(preview_label)
 
-            self.preview_edit = QTextEdit()
+            self.preview_edit = QPlainTextEdit()
             self.preview_edit.setReadOnly(True)
             self.preview_edit.setPlainText(content)
             self.preview_edit.setMaximumBlockCount(200)

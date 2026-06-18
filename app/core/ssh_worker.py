@@ -29,6 +29,7 @@ class SshCommandWorker(QThread):
         password: str,
         key_path: str,
         command: str,
+        stdin_data: Optional[str] = None,
         parent: Optional[QObject] = None,
     ) -> None:
         super().__init__(parent)
@@ -38,6 +39,7 @@ class SshCommandWorker(QThread):
         self._password = password
         self._key_path = key_path
         self._command = command
+        self._stdin_data = stdin_data
 
     def run(self) -> None:
         self.state_changed.emit("连接中")
@@ -66,6 +68,9 @@ class SshCommandWorker(QThread):
 
             _log.debug(f"SSH 执行命令: {self._command}")
             stdin, stdout, stderr = client.exec_command(self._command, timeout=30)
+            if self._stdin_data is not None:
+                stdin.write(self._stdin_data.encode("utf-8"))
+                stdin.channel.shutdown_write()
             out = stdout.read().decode("utf-8", errors="replace")
             err = stderr.read().decode("utf-8", errors="replace")
 

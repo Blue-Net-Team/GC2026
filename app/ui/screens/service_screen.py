@@ -10,6 +10,9 @@ from typing import Optional
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -21,6 +24,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -58,6 +62,8 @@ class ServiceScreen(QWidget):
         self._workers: set[SshCommandWorker] = set()
         self._descriptions = self._load_descriptions()
         self._service_to_row: dict[str, int] = {}
+        self._load_buttons: dict[str, QPushButton] = {}
+        self._op_button_groups: dict[str, tuple[QPushButton, QPushButton, QPushButton]] = {}
 
         self._build_ui()
         self._device_store.devices_changed.connect(self._refresh_device_combo)
@@ -162,6 +168,13 @@ class ServiceScreen(QWidget):
             ops_layout.setContentsMargins(6, 2, 6, 2)
             ops_layout.setSpacing(10)
 
+            load_btn = QPushButton("加载")
+            load_btn.setFixedSize(54, 26)
+            load_btn.setStyleSheet(self._op_button_style())
+            load_btn.setVisible(False)
+            load_btn.clicked.connect(lambda _=False, s=service: self._on_load_service(s))
+            self._load_buttons[service] = load_btn
+
             start_btn = QPushButton("启动")
             start_btn.setFixedSize(54, 26)
             start_btn.setStyleSheet(self._op_button_style())
@@ -177,6 +190,9 @@ class ServiceScreen(QWidget):
             restart_btn.setStyleSheet(self._op_secondary_button_style())
             restart_btn.clicked.connect(lambda _=False, s=service: self._on_action(s, "restart"))
 
+            self._op_button_groups[service] = (start_btn, stop_btn, restart_btn)
+
+            ops_layout.addWidget(load_btn)
             ops_layout.addWidget(start_btn)
             ops_layout.addWidget(stop_btn)
             ops_layout.addWidget(restart_btn)
@@ -282,6 +298,7 @@ class ServiceScreen(QWidget):
         device: RemoteDevice,
         password: str,
         command: str,
+        stdin_data: Optional[str] = None,
     ) -> SshCommandWorker:
         worker = SshCommandWorker(
             host=device.ip,
@@ -290,6 +307,7 @@ class ServiceScreen(QWidget):
             password=password,
             key_path=device.ssh_key_path or "",
             command=command,
+            stdin_data=stdin_data,
             parent=self,
         )
         worker.output.connect(self._append_output)
@@ -367,6 +385,7 @@ class ServiceScreen(QWidget):
 
         active_text = f"{active} ({sub})" if sub else active
         self._set_service_state(service, active_text, enabled, load)
+        self._update_op_buttons(service, load == "loaded")
 
     def _set_service_state(self, service: str, active: str, enabled: str, load: str) -> None:
         row = self._service_to_row.get(service)
@@ -375,6 +394,18 @@ class ServiceScreen(QWidget):
         self._table.item(row, 1).setText(active)
         self._table.item(row, 2).setText(enabled)
         self._table.item(row, 3).setText(load)
+
+    def _update_op_buttons(self, service: str, loaded: bool) -> None:
+        load_btn = self._load_buttons.get(service)
+        start_btn, stop_btn, restart_btn = self._op_button_groups.get(service, (None, None, None))
+        if load_btn is not None:
+            load_btn.setVisible(not loaded)
+        if start_btn is not None:
+            start_btn.setVisible(loaded)
+        if stop_btn is not None:
+            stop_btn.setVisible(loaded)
+        if restart_btn is not None:
+            restart_btn.setVisible(loaded)
 
     def _on_action(self, service: str, action: str) -> None:
         dev = self._get_current_device()
@@ -422,3 +453,163 @@ class ServiceScreen(QWidget):
         worker.finished.connect(
             lambda: self._refresh_service_with_auth(device, password, service)
         )
+
+    # ----------------------------------------------------------- Load service
+    def _on_load_service(self, service: str) -> None:
+        dev = self._get_current_device()
+        if dev is None:
+            return
+        device, password = dev
+
+        local_path = Path("run_auto") / f"{service}.service"
+        if not local_path.exists():
+            QMessageBox.critical(
+                self,
+                "缺少服务文件",
+                f"本地未找到服务文件：{local_path}\n\n"
+                f"请在项目根目录维护 run_auto/{service}.service 后再试。",
+            )
+            return
+
+        try:
+            raw_content = local_path.read_text(encoding="utf-8")
+        except Exception as e:
+            QMessageBox.critical(self, "读取失败", f"读取服务文件失败：{e}")
+            return
+
+        default_user = device.ssh_username or "lckfb"
+        dialog = self._LoadServiceDialog(
+            service,
+            raw_content,
+            default_user=default_user,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        project_path = dialog.project_path.strip().rstrip("/")
+        user = dialog.user.strip()
+        uv_path = dialog.uv_path.strip()
+        content = self._render_service_content(raw_content, project_path, user, uv_path)
+
+        self._append_output(f"# 加载服务 {service} 到 {device.ip}")
+        self._append_output(f"# 项目路径: {project_path}")
+        self._append_output(f"# 运行用户: {user}")
+        self._append_output(f"# uv 路径: {uv_path}")
+
+        command = (
+            f"sudo -S bash -c "
+            f"'cat > /etc/systemd/system/{service} && systemctl daemon-reload'"
+        )
+        self._append_output(f"$ sudo -S ... < {service}.service")
+        worker = self._start_worker(
+            device,
+            password,
+            command,
+            stdin_data=f"{password}\n{content}",
+        )
+        worker.finished.connect(
+            lambda: self._refresh_service_with_auth(device, password, service)
+        )
+
+    def _render_service_content(
+        self,
+        content: str,
+        project_path: str,
+        user: str,
+        uv_path: str,
+    ) -> str:
+        rendered = content
+        rendered = rendered.replace("User=lckfb", f"User={user}")
+        rendered = rendered.replace("/userdata/code/GC2026", project_path)
+        rendered = rendered.replace("/home/lckfb/.local/bin/uv", uv_path)
+        return rendered
+
+    class _LoadServiceDialog(QDialog):
+        def __init__(
+            self,
+            service: str,
+            content: str,
+            default_user: str = "lckfb",
+            parent: Optional[QWidget] = None,
+        ) -> None:
+            super().__init__(parent)
+            self.setWindowTitle(f"加载服务：{service}")
+            self.setMinimumWidth(560)
+
+            layout = QVBoxLayout(self)
+            layout.setSpacing(12)
+
+            hint = QLabel(
+                "服务文件将从本地 run_auto 目录上传到对端 /etc/systemd/system/，"
+                "并根据下方配置替换其中的路径与用户名。上传完成后会自动 daemon-reload。"
+            )
+            hint.setWordWrap(True)
+            hint.setStyleSheet(
+                f"color: {AppTheme.colors.foreground_secondary}; font-size: 12px;"
+            )
+            layout.addWidget(hint)
+
+            form_layout = QFormLayout()
+            form_layout.setSpacing(10)
+
+            self.project_path_edit = QLineEdit("/userdata/code/GC2026")
+            form_layout.addRow("项目路径：", self.project_path_edit)
+
+            self.user_edit = QLineEdit(default_user)
+            form_layout.addRow("运行用户：", self.user_edit)
+
+            default_uv = f"/home/{default_user}/.local/bin/uv"
+            self.uv_path_edit = QLineEdit(default_uv)
+            form_layout.addRow("uv 路径：", self.uv_path_edit)
+
+            layout.addLayout(form_layout)
+
+            preview_label = QLabel("预览（将上传的内容）：")
+            preview_label.setStyleSheet(
+                f"color: {AppTheme.colors.foreground_secondary}; font-size: 12px;"
+            )
+            layout.addWidget(preview_label)
+
+            self.preview_edit = QTextEdit()
+            self.preview_edit.setReadOnly(True)
+            self.preview_edit.setPlainText(content)
+            self.preview_edit.setMaximumBlockCount(200)
+            layout.addWidget(self.preview_edit, stretch=1)
+
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            )
+            buttons.accepted.connect(self.accept)
+            buttons.rejected.connect(self.reject)
+            layout.addWidget(buttons)
+
+            self._original_content = content
+            self.project_path_edit.textChanged.connect(self._update_preview)
+            self.user_edit.textChanged.connect(self._update_preview)
+            self.uv_path_edit.textChanged.connect(self._update_preview)
+            self._update_preview()
+
+        def _update_preview(self) -> None:
+            screen = self.parent()
+            if not isinstance(screen, ServiceScreen):
+                return
+            rendered = screen._render_service_content(
+                self._original_content,
+                self.project_path_edit.text().strip().rstrip("/"),
+                self.user_edit.text().strip(),
+                self.uv_path_edit.text().strip(),
+            )
+            self.preview_edit.setPlainText(rendered)
+
+        @property
+        def project_path(self) -> str:
+            return self.project_path_edit.text()
+
+        @property
+        def user(self) -> str:
+            return self.user_edit.text()
+
+        @property
+        def uv_path(self) -> str:
+            return self.uv_path_edit.text()

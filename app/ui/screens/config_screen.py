@@ -8,6 +8,7 @@ GC2026 桌面调参应用 - 设备配置管理页面
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -29,7 +31,9 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
+from app.core.config_bridge import ConfigBridge
 from app.core.device_store import DeviceStore, RemoteDevice
+from app.core.ssh_worker import SshCommandWorker
 from app.ui.theme import AppTheme
 
 _log = logger.bind(module="ConfigScreen")
@@ -166,6 +170,8 @@ class ConfigScreen(QWidget):
     ) -> None:
         super().__init__(parent)
         self._device_store = device_store
+        self._config_bridge = ConfigBridge()
+        self._workers: set[SshCommandWorker] = set()
 
         self._build_ui()
         self.refresh()
@@ -203,7 +209,7 @@ class ConfigScreen(QWidget):
         for col in (1, 2, 3, 4, 5, 6):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        self._device_table.setColumnWidth(7, 150)
+        self._device_table.setColumnWidth(7, 260)
         self._device_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._device_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._device_table.verticalHeader().setVisible(False)
@@ -281,12 +287,157 @@ class ConfigScreen(QWidget):
             self.refresh()
             _log.info(f"已删除设备: {device.name}")
 
+    def _on_upload_config(self, device_id: str) -> None:
+        auth = self._get_device_auth(device_id)
+        if auth is None:
+            return
+        device, password = auth
+
+        reply = QMessageBox.question(
+            self,
+            "上传配置",
+            f"确定要用本地 config.yaml 覆盖设备 \"{device.name}\" 上的配置吗？\n\n"
+            f"目标路径: {device.code_path}/config.yaml",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        config_path = self._config_bridge.path
+        if not config_path.exists():
+            QMessageBox.critical(self, "缺少配置文件", f"本地未找到配置文件: {config_path}")
+            return
+
+        try:
+            content = config_path.read_text(encoding="utf-8")
+        except Exception as e:
+            QMessageBox.critical(self, "读取失败", f"读取本地配置失败: {e}")
+            return
+
+        remote_path = f"{device.code_path}/config.yaml"
+        command = f"sudo -S bash -c 'cat > {remote_path}'"
+        worker = self._start_ssh_worker(
+            device,
+            password,
+            command,
+            stdin_data=f"{password}\n{content}",
+        )
+        worker.output.connect(lambda text: self._on_upload_done(device, text))
+        worker.error.connect(lambda msg: QMessageBox.critical(self, "上传失败", msg))
+
+    def _on_upload_done(self, device: RemoteDevice, text: str) -> None:
+        if "permission denied" in text.lower() or "denied" in text.lower():
+            QMessageBox.critical(self, "上传失败", f"权限不足，请确认 sudo 密码正确。\n\n{text}")
+            return
+        QMessageBox.information(
+            self,
+            "上传完成",
+            f"本地配置已上传到 \"{device.name}\": {device.code_path}/config.yaml",
+        )
+
+    def _on_download_config(self, device_id: str) -> None:
+        auth = self._get_device_auth(device_id)
+        if auth is None:
+            return
+        device, password = auth
+
+        reply = QMessageBox.question(
+            self,
+            "下载配置",
+            f"确定要用设备 \"{device.name}\" 上的配置覆盖本地 config.yaml 吗？\n\n"
+            f"源路径: {device.code_path}/config.yaml",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        remote_path = f"{device.code_path}/config.yaml"
+        command = f"cat {remote_path}"
+        worker = self._start_ssh_worker(device, password, command)
+        worker.output.connect(lambda text: self._on_download_done(device, text))
+        worker.error.connect(lambda msg: QMessageBox.critical(self, "下载失败", msg))
+
+    def _on_download_done(self, device: RemoteDevice, text: str) -> None:
+        if not text.strip():
+            QMessageBox.critical(
+                self,
+                "下载失败",
+                f"从 \"{device.name}\" 获取的配置内容为空，请检查远程文件是否存在。",
+            )
+            return
+
+        try:
+            self._config_bridge.path.write_text(text, encoding="utf-8")
+            self._config_bridge.load()
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"写入本地配置失败: {e}")
+            return
+
+        QMessageBox.information(
+            self,
+            "下载完成",
+            f"已用 \"{device.name}\" 上的配置覆盖本地 config.yaml，\n"
+            f"请切换到调参页面查看最新参数。",
+        )
+
     def _auth_method(self, device: RemoteDevice) -> str:
         if device.ssh_key_path:
             return "密钥"
         if device.ssh_password:
             return "密码"
         return "未配置"
+
+    def _get_device_auth(self, device_id: str) -> Optional[tuple[RemoteDevice, str]]:
+        device = self._device_store.get(device_id)
+        if device is None:
+            return None
+
+        key_path = (device.ssh_key_path or "").strip()
+        password = device.ssh_password or ""
+
+        if key_path and Path(key_path).exists():
+            return device, password
+
+        if not password:
+            text, ok = QInputDialog.getText(
+                self,
+                "SSH 密码",
+                f"设备 {device.name} 未配置密码或密钥，请输入密码:",
+                QLineEdit.EchoMode.Password,
+            )
+            if not ok or not text:
+                return None
+            password = text
+
+        return device, password
+
+    def _start_ssh_worker(
+        self,
+        device: RemoteDevice,
+        password: str,
+        command: str,
+        stdin_data: Optional[str] = None,
+    ) -> SshCommandWorker:
+        worker = SshCommandWorker(
+            host=device.ip,
+            ssh_port=device.ssh_port,
+            username=device.ssh_username or "lckfb",
+            password=password,
+            key_path=device.ssh_key_path or "",
+            command=command,
+            stdin_data=stdin_data,
+            parent=self,
+        )
+        worker.finished.connect(lambda: self._on_worker_finished(worker))
+        self._workers.add(worker)
+        worker.start()
+        return worker
+
+    def _on_worker_finished(self, worker: SshCommandWorker) -> None:
+        self._workers.discard(worker)
+        worker.deleteLater()
 
     def _op_button_style(self) -> str:
         c = AppTheme.colors
@@ -341,7 +492,19 @@ class ConfigScreen(QWidget):
             op_widget.setStyleSheet("background-color: transparent;")
             op_layout = QHBoxLayout(op_widget)
             op_layout.setContentsMargins(4, 0, 4, 0)
-            op_layout.setSpacing(6)
+            op_layout.setSpacing(4)
+
+            upload_btn = QPushButton("上传")
+            upload_btn.setFixedSize(54, 24)
+            upload_btn.setStyleSheet(self._op_button_style())
+            upload_btn.setToolTip("上传本地 config.yaml 覆盖远程设备配置")
+            upload_btn.clicked.connect(lambda _checked, did=device.id: self._on_upload_config(did))
+
+            download_btn = QPushButton("下载")
+            download_btn.setFixedSize(54, 24)
+            download_btn.setStyleSheet(self._op_button_style())
+            download_btn.setToolTip("从远程设备下载 config.yaml 覆盖本地配置")
+            download_btn.clicked.connect(lambda _checked, did=device.id: self._on_download_config(did))
 
             edit_btn = QPushButton("编辑")
             edit_btn.setFixedSize(54, 24)
@@ -353,6 +516,8 @@ class ConfigScreen(QWidget):
             del_btn.setStyleSheet(self._op_secondary_button_style())
             del_btn.clicked.connect(lambda _checked, did=device.id: self._on_delete_device(did))
 
+            op_layout.addWidget(upload_btn)
+            op_layout.addWidget(download_btn)
             op_layout.addWidget(edit_btn)
             op_layout.addWidget(del_btn)
             op_layout.addStretch()

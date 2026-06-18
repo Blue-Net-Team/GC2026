@@ -123,9 +123,9 @@ QPushButton#secondary {{
 }}
 
 QPushButton#secondary:hover {{
-    background-color: {c.surface_tertiary};
+    background-color: {cls._lighten(c.accent_primary, 20)};
     color: {c.foreground_primary};
-    border: 1px solid {c.accent_primary};
+    border: 1px solid {cls._lighten(c.accent_primary, 40)};
 }}
 
 QPushButton#secondary:disabled {{

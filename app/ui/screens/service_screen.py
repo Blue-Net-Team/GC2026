@@ -411,9 +411,11 @@ class ServiceScreen(QWidget):
         if dev is None:
             return
         device, password = dev
-        command = f"sudo systemctl {action} {service}"
-        self._append_output(f"$ {command}")
-        worker = self._start_worker(device, password, command)
+        command = f"sudo -S systemctl {action} {service}"
+        self._append_output(f"$ sudo -S systemctl {action} {service}")
+        worker = self._start_worker(
+            device, password, command, stdin_data=f"{password}\n"
+        )
         worker.finished.connect(
             lambda: self._refresh_service_with_auth(device, password, service)
         )
@@ -446,9 +448,11 @@ class ServiceScreen(QWidget):
         if dev is None:
             return
         device, password = dev
-        command = f"sudo systemctl {action} {service}"
-        self._append_output(f"$ {command}")
-        worker = self._start_worker(device, password, command)
+        command = f"sudo -S systemctl {action} {service}"
+        self._append_output(f"$ sudo -S systemctl {action} {service}")
+        worker = self._start_worker(
+            device, password, command, stdin_data=f"{password}\n"
+        )
         worker.finished.connect(
             lambda: self._refresh_service_with_auth(device, password, service)
         )

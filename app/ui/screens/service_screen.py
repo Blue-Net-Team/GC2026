@@ -478,10 +478,12 @@ class ServiceScreen(QWidget):
             return
 
         default_user = device.ssh_username or "lckfb"
+        default_code_path = device.code_path or "/userdata/code/GC2026"
         dialog = self._LoadServiceDialog(
             service,
             raw_content,
             default_user=default_user,
+            default_code_path=default_code_path,
             parent=self,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -531,6 +533,7 @@ class ServiceScreen(QWidget):
             service: str,
             content: str,
             default_user: str = "lckfb",
+            default_code_path: str = "/userdata/code/GC2026",
             parent: Optional[QWidget] = None,
         ) -> None:
             super().__init__(parent)
@@ -553,7 +556,7 @@ class ServiceScreen(QWidget):
             form_layout = QFormLayout()
             form_layout.setSpacing(10)
 
-            self.project_path_edit = QLineEdit("/userdata/code/GC2026")
+            self.project_path_edit = QLineEdit(default_code_path)
             form_layout.addRow("项目路径：", self.project_path_edit)
 
             self.user_edit = QLineEdit(default_user)

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
     QFrame,
@@ -291,6 +291,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("工创2026调参")
         self.resize(1280, 800)
         self.setStyleSheet(f"background-color: {AppTheme.colors.surface_primary};")
+
+        icon_path = Path(__file__).parent.parent / "resources" / "icons" / "icon.svg"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         central = QWidget()
         self.setCentralWidget(central)

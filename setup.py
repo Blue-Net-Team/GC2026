@@ -77,7 +77,9 @@ class Setup:
             if frame is None:
                 break
 
-            result, res_img = await self.colorRingDetector.detect(frame)
+            centers, binary = await self.colorRingDetector.detect(frame)
+            circles = await self.colorRingDetector.get_circles(binary)
+            res_img = self.colorRingDetector.visualize(frame, circles, binary)
 
             cv2.imshow("ColorRing", res_img)
 

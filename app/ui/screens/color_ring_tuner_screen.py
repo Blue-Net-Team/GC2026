@@ -48,6 +48,40 @@ def _cv_to_pixmap(frame: np.ndarray) -> QPixmap:
     return QPixmap.fromImage(image)
 
 
+def _sync_binarize(detector: ColorRingDetector, frame: np.ndarray) -> np.ndarray:
+    """在线程池中运行异步二值化函数"""
+    coro = detector.binarization(frame)
+    try:
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+def _sync_get_circles(
+    detector: ColorRingDetector, binary: np.ndarray
+) -> Optional[list[tuple[int, int, int]]]:
+    """在线程池中运行异步霍夫圆检测函数"""
+    coro = detector.get_circles(binary)
+    try:
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+def _draw_circle_overlay(
+    frame: np.ndarray, circles: Optional[list[tuple[int, int, int]]]
+) -> np.ndarray:
+    """在原图上绘制检测到的色环圆和圆心"""
+    output = frame.copy()
+    if circles:
+        for x, y, r in circles:
+            cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
+            cv2.circle(output, (int(x), int(y)), 2, (255, 0, 0), 2)
+    return output
+
+
 class VideoPreview(QLabel):
     """等比缩放、完整显示的视频预览标签"""
 
@@ -222,7 +256,7 @@ class AdvancedParamSlider(QWidget):
 class ColorRingTunerScreen(QWidget):
     """色环调参页面"""
 
-    _preview_ready = pyqtSignal(np.ndarray, object)
+    _preview_ready = pyqtSignal(np.ndarray, np.ndarray, object)
 
     def __init__(
         self,
@@ -440,31 +474,36 @@ class ColorRingTunerScreen(QWidget):
 
         detector = self._detector
 
-        def _process() -> tuple[np.ndarray, Any]:
-            try:
-                loop = asyncio.new_event_loop()
-                result, processed = loop.run_until_complete(detector.detect(frame))
-                return processed, result
-            finally:
-                loop.close()
+        def _process() -> tuple[np.ndarray, np.ndarray, Optional[list[tuple[int, int, int]]]]:
+            binary = _sync_binarize(detector, frame)
+            circles = _sync_get_circles(detector, binary)
+            overlay = _draw_circle_overlay(frame, circles)
+            binary_bgr = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+            return overlay, binary_bgr, circles
 
         future = self._executor.submit(_process)
 
         def _on_done(_future) -> None:
             try:
-                processed, result = _future.result()
-                self._preview_ready.emit(processed, result)
+                overlay, binary_bgr, circles = _future.result()
+                self._preview_ready.emit(overlay, binary_bgr, circles)
             except Exception as e:
                 _log.error(f"色环预览计算失败: {e}")
 
         future.add_done_callback(_on_done)
 
-    def _on_preview_ready(self, processed: np.ndarray, result: Any) -> None:
-        self._mask_preview.set_frame(processed)
+    def _on_preview_ready(
+        self,
+        overlay: np.ndarray,
+        binary_bgr: np.ndarray,
+        circles: Optional[list[tuple[int, int, int]]],
+    ) -> None:
+        self._video_preview.set_frame(overlay)
+        self._mask_preview.set_frame(binary_bgr)
 
-        if result:
-            centers = ", ".join(f"({x}, {y})" for x, y in result)
-            self._info_label.setText(f"检测到 {len(result)} 个圆: {centers}")
+        if circles:
+            centers = ", ".join(f"({x}, {y})" for x, y, _ in circles)
+            self._info_label.setText(f"检测到 {len(circles)} 个圆: {centers}")
         else:
             self._info_label.setText("未检测到色环")
 

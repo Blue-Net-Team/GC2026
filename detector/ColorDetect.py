@@ -205,6 +205,39 @@ class TraditionalColorDetector(Detect):
                 return center_x, center_y, w, h
         return None
 
+    def visualize(
+        self,
+        img: cv2.typing.MatLike,
+        mask: cv2.typing.MatLike,
+        pos: tuple[int, int, int, int] | None = None,
+    ) -> cv2.typing.MatLike:
+        """
+        可视化颜色检测结果
+        ----
+        在原图上绘制外接矩形，并与二值化图纵向拼接。
+
+        Args:
+            img: 原始图像
+            mask: 二值化图像
+            pos: 目标位置 (cx, cy, w, h)，为 None 时不绘制矩形
+        Returns:
+            拼接后的可视化图像
+        """
+        output = img.copy()
+        if pos is not None:
+            cx, cy, w, h = pos
+            x1 = cx - w // 2
+            y1 = cy - h // 2
+            x2 = cx + w // 2
+            y2 = cy + h // 2
+            cv2.rectangle(output, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.circle(output, (cx, cy), 4, (0, 255, 0), -1)
+
+        return np.vstack([
+            output,
+            cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR),
+        ])
+
     def createTrackbar(self):
         """
         创建调节条

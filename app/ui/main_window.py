@@ -44,12 +44,14 @@ class NavItem(QWidget):
         icon_text: str,
         label: str,
         icon_path: Optional[str | Path] = None,
+        colored: bool = False,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._active = False
         self._icon_text = icon_text
         self._icon_path = Path(icon_path) if icon_path else None
+        self._colored = colored
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(14, 10, 14, 10)
         self._layout.setSpacing(12)
@@ -73,8 +75,12 @@ class NavItem(QWidget):
     def _set_icon(self) -> None:
         if self._icon_path is not None and self._icon_path.exists():
             base = self._load_icon(self._icon_path)
-            self._icon_normal = self._tint_icon(base, AppTheme.colors.foreground_muted)
-            self._icon_active = self._tint_icon(base, AppTheme.colors.foreground_primary)
+            if self._colored:
+                self._icon_normal = base
+                self._icon_active = base
+            else:
+                self._icon_normal = self._tint_icon(base, AppTheme.colors.foreground_muted)
+                self._icon_active = self._tint_icon(base, AppTheme.colors.foreground_primary)
             self._icon.setPixmap(self._icon_normal)
             self._icon.setStyleSheet("")
         else:
@@ -189,16 +195,16 @@ class Sidebar(QWidget):
         self._nav_items: list[NavItem] = []
         icon_dir = Path(__file__).parent.parent / "resources" / "icons"
         nav_data = [
-            ("videocam", "图传接收", icon_dir / "图传.svg"),
-            ("palette", "颜色调参", icon_dir / "RGB.svg"),
-            ("donut_large", "色环调参", icon_dir / "圆环.svg"),
-            ("article", "日志", icon_dir / "日志.svg"),
-            ("settings", "配置", icon_dir / "配置管理.svg"),
-            ("build", "服务", icon_dir / "服务.svg"),
+            ("videocam", "图传接收", icon_dir / "图传.svg", False),
+            ("palette", "颜色调参", icon_dir / "RGB.svg", True),
+            ("donut_large", "色环调参", icon_dir / "圆环.svg", False),
+            ("article", "日志", icon_dir / "日志.svg", False),
+            ("settings", "配置", icon_dir / "配置管理.svg", False),
+            ("build", "服务", icon_dir / "服务.svg", False),
         ]
 
-        for idx, (icon, label, icon_path) in enumerate(nav_data):
-            item = NavItem(icon, label, icon_path=icon_path)
+        for idx, (icon, label, icon_path, colored) in enumerate(nav_data):
+            item = NavItem(icon, label, icon_path=icon_path, colored=colored)
             item.clicked.connect(lambda checked=False, i=idx: self._on_item_clicked(i))
             self._nav_items.append(item)
             layout.addWidget(item)

@@ -31,38 +31,34 @@ class Applications:
         :param color_label: 颜色标签,包含['R','G','B']
         :return: 物料位置的坐标（x, y）, 处理后的图像（绘制轮廓）
         """
-        # 颜色过滤
         self.colorDetector.update_range(color_label)
-        filtered_img = await self.colorDetector.binarization(img)
-        pos = await self.colorDetector.get_color_position(filtered_img)
-        draw_img = self.colorDetector.visualize(img, filtered_img, pos)
+        result, binary = await self.colorDetector.detect(img)
+        draw_img = self.colorDetector.visualize(img, result, binary)
 
-        if pos is None:
+        if result is None:
             _log.warning("未检测到物料位置")
             return None, draw_img
 
-        cx, cy, w, h = pos
+        cx, cy, _w, _h = result
         _log.info(f"检测到物料中心点: ({cx}, {cy})")
         return (cx, cy), draw_img
-        
+
     async def detect_circle(self, img: cv2.typing.MatLike, label=None):
         """
         检测图片中的圆位置
         ----
         :return: 圆心坐标 (x, y), 处理后的图像（原图+识别圆 与 二值化图拼接）
         """
-        # 圆检测
-        centers, binary = await self.colorRingDetector.detect(img)
-        circles = await self.colorRingDetector.get_circles(binary)
-        draw_img = self.colorRingDetector.visualize(img, circles, binary)
+        result, binary = await self.colorRingDetector.detect(img)
+        draw_img = self.colorRingDetector.visualize(img, result, binary)
 
-        if centers:
-            _log.info(f"检测到圆位置: {centers[0]}")
-            return centers[0], draw_img
+        if result:
+            x, y, _r = result[0]
+            _log.info(f"检测到圆位置: ({x}, {y})")
+            return (x, y), draw_img
         else:
             _log.warning("未检测到圆位置")
             return None, draw_img
-    
     def tuple2str(self, _tuple: tuple|None) -> str:
         """
         元组转换为特定格式的字符串

@@ -303,25 +303,52 @@ class ColorRingDetector(Detect):
 
     async def detect(
         self, _img: cv2.typing.MatLike
-    ) -> tuple[list[tuple[int, int]] | None, cv2.typing.MatLike]:
+    ) -> tuple[list[tuple[int, int, int]] | None, cv2.typing.MatLike]:
         """
         检测色环
         ----
-        组合 binarization() 与 get_circles()，返回圆心坐标和预处理图像。
+        组合 binarization() 与 get_circles()，返回完整圆列表和预处理图像。
         不在原图上绘制任何标记，由调用方决定如何可视化。
 
         :param _img: 需要检测的图片
-        :return: (圆心坐标列表 [(x1,y1), ...], 预处理后的单通道图像)
+        :return: (圆列表 [(x, y, r), ...], 预处理后的单通道图像)
                  未检测到圆时第一个元素为 None
         """
         binary = await self.binarization(_img)
         circles = await self.get_circles(binary)
+        return circles, binary
 
-        if circles is not None:
-            centers = [(x, y) for x, y, r in circles]
-            return centers, binary
+    def draw_overlay(
+        self,
+        frame: cv2.typing.MatLike,
+        result: list[tuple[int, int, int]] | None,
+        binary: cv2.typing.MatLike,
+    ) -> cv2.typing.MatLike:
+        """
+        在原图上绘制检测到的色环和圆心。
 
-        return None, binary
+        :param frame: 原始图像
+        :param result: detect() 返回的圆列表 [(x, y, r), ...]
+        :param binary: 预处理后的单通道图像（本方法中未使用，仅保持接口一致）
+        :return: 绘制后的图像
+        """
+        output = frame.copy()
+        if result is not None:
+            for x, y, r in result:
+                cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
+                cv2.circle(output, (int(x), int(y)), 2, (255, 0, 0), 2)
+        return output
+
+    def format_detection_info(self, result: list[tuple[int, int, int]] | None) -> str:
+        """格式化检测信息文本。"""
+        if result is None:
+            return "未检测到圆"
+        lines = [f"检测到 {len(result)} 个圆:"]
+        for i, (x, y, r) in enumerate(result[:5], 1):
+            lines.append(f"  圆{i}: 中心({x}, {y}) 半径{r}")
+        if len(result) > 5:
+            lines.append(f"  ... 还有 {len(result) - 5} 个")
+        return "\n".join(lines)
 
     def visualize(
         self,

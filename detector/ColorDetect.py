@@ -164,6 +164,94 @@ class TraditionalColorDetector(Detect):
 
         self.update_range(color)
 
+    async def detect(self, _img: cv2.typing.MatLike) -> tuple[tuple[int, int, int, int] | None, cv2.typing.MatLike]:
+        """
+        颜色检测预览接口
+        ----
+        对输入图像进行二值化并获取目标位置。
+
+        Args:
+            _img: 输入图像
+        Returns:
+            (目标位置 (cx, cy, w, h) 或 None, 二值化图像)
+        """
+        mask = await self.binarization(_img)
+        pos = await self.get_color_position(mask)
+        return pos, mask
+
+    def draw_overlay(
+        self,
+        frame: cv2.typing.MatLike,
+        result: tuple[int, int, int, int] | None,
+        binary: cv2.typing.MatLike,
+    ) -> cv2.typing.MatLike:
+        """
+        在原图上绘制检测到的物料外接矩形和中心点。
+
+        Args:
+            frame: 原始图像
+            result: detect() 返回的目标位置 (cx, cy, w, h)
+            binary: 二值化图像（本方法中未使用，仅保持接口一致）
+        Returns:
+            绘制后的图像
+        """
+        output = frame.copy()
+        if result is not None:
+            cx, cy, w, h = result
+            x1 = cx - w // 2
+            y1 = cy - h // 2
+            x2 = cx + w // 2
+            y2 = cy + h // 2
+            cv2.rectangle(output, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.circle(output, (cx, cy), 4, (0, 255, 0), -1)
+        return output
+
+    def format_detection_info(self, result: tuple[int, int, int, int] | None) -> str:
+        """格式化检测信息文本。"""
+        if result is None:
+            return "未检测到目标"
+        cx, cy, w, h = result
+        return f"目标: ({cx}, {cy}) 外接矩形: {w}x{h}"
+
+    def get_tunable_value(self, key: str, section: str | None = None):
+        """读取可调参数值。section 为 R/G/B 时读取 color_threshold，否则读取类属性。"""
+        if section in (self.color_groups or []):
+            return self.color_threshold[section][key]
+        return getattr(self, key)
+
+    def set_tunable_value(self, key: str, value, section: str | None = None):
+        """写入可调参数值。section 为 R/G/B 时写入 color_threshold，否则写入类属性。"""
+        if section in (self.color_groups or []):
+            self.color_threshold[section][key] = value
+        else:
+            setattr(self, key, value)
+
+    def load_tunable_from_app_config(self, app_config):
+        """从 AppConfig 同步颜色检测参数。"""
+        for color in self.color_groups or []:
+            cfg = app_config.color[color]
+            for key in cfg.to_dict():
+                if key in self.color_threshold[color]:
+                    self.color_threshold[color][key] = getattr(cfg, key)
+        self.min_material_area = app_config.min_material_area
+        self.max_material_area = app_config.max_material_area
+        self.update_threshold(self.color)
+
+    def save_tunable_to_app_config(self, app_config):
+        """保存颜色检测参数到 AppConfig。"""
+        for color in self.color_groups or []:
+            cfg = app_config.color[color]
+            for key in cfg.to_dict():
+                if key in self.color_threshold[color]:
+                    setattr(cfg, key, self.color_threshold[color][key])
+        app_config.min_material_area = self.min_material_area
+        app_config.max_material_area = self.max_material_area
+
+    @property
+    def color_groups(self):
+        """颜色分组列表，取自 TUNABLE_PARAMS。"""
+        return self.TUNABLE_PARAMS.color_groups
+
     async def binarization(self, _img: cv2.typing.MatLike) -> cv2.typing.MatLike:
         """
         二值化
@@ -225,39 +313,6 @@ class TraditionalColorDetector(Detect):
 
                 return center_x, center_y, w, h
         return None
-
-    def visualize(
-        self,
-        img: cv2.typing.MatLike,
-        mask: cv2.typing.MatLike,
-        pos: tuple[int, int, int, int] | None = None,
-    ) -> cv2.typing.MatLike:
-        """
-        可视化颜色检测结果
-        ----
-        在原图上绘制外接矩形，并与二值化图纵向拼接。
-
-        Args:
-            img: 原始图像
-            mask: 二值化图像
-            pos: 目标位置 (cx, cy, w, h)，为 None 时不绘制矩形
-        Returns:
-            拼接后的可视化图像
-        """
-        output = img.copy()
-        if pos is not None:
-            cx, cy, w, h = pos
-            x1 = cx - w // 2
-            y1 = cy - h // 2
-            x2 = cx + w // 2
-            y2 = cy + h // 2
-            cv2.rectangle(output, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.circle(output, (cx, cy), 4, (0, 255, 0), -1)
-
-        return np.vstack([
-            output,
-            cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR),
-        ])
 
     def createTrackbar(self):
         """
@@ -386,5 +441,3 @@ class TraditionalColorDetector(Detect):
         super().load_param(config_dict, "max_material_area", default=self.max_material_area)
 
         self.update_threshold("R")
-
-

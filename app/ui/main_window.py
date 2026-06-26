@@ -30,8 +30,17 @@ from app.core.config_bridge import ConfigBridge
 from app.core.device_store import DeviceStore
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
+from detector.ColorDetect import TraditionalColorDetector
+from detector.ColorRingDetect import ColorRingDetector
 
 _log = logger.bind(module="MainWindow")
+
+
+# Detector 注册表：每个条目 = (detector 类, 页面标题, fallback 图标名, 图标文件名, 是否彩色图标)
+DETECTOR_REGISTRY: list[tuple[type, str, str, str, bool]] = [
+    (TraditionalColorDetector, "颜色调参", "palette", "RGB.svg", True),
+    (ColorRingDetector, "色环调参", "donut_large", "圆环.svg", False),
+]
 
 
 class NavItem(QWidget):
@@ -163,7 +172,11 @@ class Sidebar(QWidget):
 
     screen_changed = pyqtSignal(int)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        nav_items: list[tuple[str, str, Optional[str | Path], bool]],
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self.setFixedWidth(AppTheme.metrics.sidebar_width)
         self.setStyleSheet(f"background-color: {AppTheme.colors.surface_secondary};")
@@ -193,18 +206,9 @@ class Sidebar(QWidget):
 
         # 导航项
         self._nav_items: list[NavItem] = []
-        icon_dir = Path(__file__).parent.parent / "resources" / "icons"
-        nav_data = [
-            ("videocam", "图传接收", icon_dir / "图传.svg", False),
-            ("palette", "颜色调参", icon_dir / "RGB.svg", True),
-            ("donut_large", "色环调参", icon_dir / "圆环.svg", False),
-            ("article", "日志", icon_dir / "日志.svg", False),
-            ("settings", "配置", icon_dir / "配置管理.svg", False),
-            ("build", "服务", icon_dir / "服务.svg", False),
-        ]
-
-        for idx, (icon, label, icon_path, colored) in enumerate(nav_data):
-            item = NavItem(icon, label, icon_path=icon_path, colored=colored)
+        for idx, (icon, label, icon_path, colored) in enumerate(nav_items):
+            path = Path(icon_path) if icon_path else None
+            item = NavItem(icon, label, icon_path=path, colored=colored)
             item.clicked.connect(lambda checked=False, i=idx: self._on_item_clicked(i))
             self._nav_items.append(item)
             layout.addWidget(item)
@@ -302,8 +306,46 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        icon_dir = Path(__file__).parent.parent / "resources" / "icons"
+
+        # 延迟导入页面，避免循环依赖
+        from app.ui.screens.receiver_screen import ReceiverScreen
+        from app.ui.screens.detector_tuner_screen import DetectorTunerScreen
+        from app.ui.screens.log_screen import LogScreen
+        from app.ui.screens.config_screen import ConfigScreen
+        from app.ui.screens.service_screen import ServiceScreen
+
+        # 静态页面
+        self._receiver_screen = ReceiverScreen(frame_source_manager, device_store)
+        self._log_screen = LogScreen(device_store)
+        self._config_screen = ConfigScreen(device_store)
+        self._service_screen = ServiceScreen(device_store)
+
+        # 按注册表动态创建 detector 调参页面
+        self._detector_screens: list[DetectorTunerScreen] = []
+        for detector_cls, title, _icon, icon_file, colored in DETECTOR_REGISTRY:
+            screen = DetectorTunerScreen(
+                detector_cls, title, config_bridge, frame_source_manager
+            )
+            self._detector_screens.append(screen)
+
+        # 构建导航项：静态页 + detector 页 + 其他静态页
+        nav_items: list[tuple[str, str, Optional[str | Path], bool]] = [
+            ("videocam", "图传接收", str(icon_dir / "图传.svg"), False),
+        ]
+        for _detector_cls, title, fallback_icon, icon_file, colored in DETECTOR_REGISTRY:
+            icon_path = icon_dir / icon_file
+            if not icon_path.exists():
+                icon_path = None  # type: ignore[assignment]
+            nav_items.append((fallback_icon, title, str(icon_path) if icon_path else None, colored))
+        nav_items.extend([
+            ("article", "日志", str(icon_dir / "日志.svg"), False),
+            ("settings", "配置", str(icon_dir / "配置管理.svg"), False),
+            ("build", "服务", str(icon_dir / "服务.svg"), False),
+        ])
+
         # 侧边栏
-        self._sidebar = Sidebar()
+        self._sidebar = Sidebar(nav_items)
         self._sidebar.screen_changed.connect(self._on_screen_changed)
         layout.addWidget(self._sidebar)
 
@@ -311,24 +353,9 @@ class MainWindow(QMainWindow):
         self._stack = QStackedWidget()
         layout.addWidget(self._stack)
 
-        # 延迟导入页面，避免循环依赖
-        from app.ui.screens.receiver_screen import ReceiverScreen
-        from app.ui.screens.color_tuner_screen import ColorTunerScreen
-        from app.ui.screens.color_ring_tuner_screen import ColorRingTunerScreen
-        from app.ui.screens.log_screen import LogScreen
-        from app.ui.screens.config_screen import ConfigScreen
-        from app.ui.screens.service_screen import ServiceScreen
-
-        self._receiver_screen = ReceiverScreen(frame_source_manager, device_store)
-        self._color_screen = ColorTunerScreen(config_bridge, frame_source_manager)
-        self._color_ring_screen = ColorRingTunerScreen(config_bridge, frame_source_manager)
-        self._log_screen = LogScreen(device_store)
-        self._config_screen = ConfigScreen(device_store)
-        self._service_screen = ServiceScreen(device_store)
-
         self._stack.addWidget(self._receiver_screen)
-        self._stack.addWidget(self._color_screen)
-        self._stack.addWidget(self._color_ring_screen)
+        for screen in self._detector_screens:
+            self._stack.addWidget(screen)
         self._stack.addWidget(self._log_screen)
         self._stack.addWidget(self._config_screen)
         self._stack.addWidget(self._service_screen)
@@ -341,9 +368,10 @@ class MainWindow(QMainWindow):
 
     def _on_screen_changed(self, index: int) -> None:
         self._stack.setCurrentIndex(index)
-        if index == 4:
+        widget = self._stack.widget(index)
+        if widget is self._config_screen:
             self._config_screen.refresh()
-        elif index == 5:
+        elif widget is self._service_screen:
             self._service_screen.refresh_devices()
 
     def _on_source_state_changed(self, state: str) -> None:

@@ -167,7 +167,7 @@ uv run setup colorring --capid 0
 1. 确保嵌入式端（泰山派）与 PC 端处于同一局域网，或者通过网线直连。
 2. 获取嵌入式端 IP：
    - 查看 OLED 屏上的 `Server IP`；或
-   - 在嵌入式端执行 `ip addr show eth0` / `ip addr show wlan0`(推荐)。
+   - 在嵌入式端执行 `ifconfig`(推荐)。
 3. 确认没有防火墙拦截对应端口（`8080` 或 `4444`）。
 
 ### 4.2 方式 A 运行流程（主程序图传）

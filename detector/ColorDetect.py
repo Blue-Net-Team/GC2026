@@ -59,6 +59,9 @@ import numpy as np
 from loguru import logger
 from .Detect import Detect
 
+# app 调参 UI 通过该 schema 动态渲染滑条
+from .schema import DetectorSchema, ParamDef
+
 _log = logger.bind(module="TraditionalColorDetector")
 
 COLOR_DICT: dict[Union[int, float, bool], str] = {
@@ -121,6 +124,24 @@ class TraditionalColorDetector(Detect):
             "U_V": 255
         }
     }
+
+    # 调参 UI 使用的参数 schema
+    TUNABLE_PARAMS = DetectorSchema(
+        name="color",
+        color_groups=["R", "G", "B"],
+        color_group_params=[
+            ParamDef("centre", "色相中心", "int", 0, 180),
+            ParamDef("error", "色相容差", "int", 0, 40),
+            ParamDef("L_S", "饱和度下限", "int", 0, 255),
+            ParamDef("U_S", "饱和度上限", "int", 0, 255),
+            ParamDef("L_V", "明度下限", "int", 0, 255),
+            ParamDef("U_V", "明度上限", "int", 0, 255),
+        ],
+        params=[
+            ParamDef("min_material_area", "最小面积", "int", 0, 30000, scale=10, section="global"),
+            ParamDef("max_material_area", "最大面积", "int", 0, 30000, scale=10, section="global"),
+        ],
+    )
 
     def __init__(self):
         self.update_threshold("R")

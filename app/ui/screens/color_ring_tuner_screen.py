@@ -3,8 +3,8 @@ Copyright (C) 2025 IVEN-CN(He Yunfeng)
 
 GC2026 桌面调参应用 - 色环调参页面
 ====
-左侧显示实时原图与霍夫圆检测预览，右侧提供预处理/霍夫检测/后处理参数分组滑动条。
-直接复用 detector.ColorRingDetect.ColorRingDetector 的识别逻辑。
+左侧显示实时原图与霍夫圆检测预览，右侧基于 ColorRingDetector.TUNABLE_PARAMS
+动态渲染预处理/霍夫检测/后处理参数分组滑条。
 """
 
 from __future__ import annotations
@@ -18,13 +18,10 @@ import numpy as np
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
-    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSlider,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -34,13 +31,14 @@ from loguru import logger
 from app.core.config_bridge import ConfigBridge
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
+from app.ui.widgets.parameter_group_panel import ParameterGroupPanel
 from detector.ColorRingDetect import ColorRingDetector
 
 _log = logger.bind(module="ColorRingTunerScreen")
 
 
 def _cv_to_pixmap(frame: np.ndarray) -> QPixmap:
-    """OpenCV BGR 帧转 QPixmap"""
+    """OpenCV BGR 帧转 QPixmap。"""
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w, ch = rgb.shape
     bytes_per_line = ch * w
@@ -49,7 +47,7 @@ def _cv_to_pixmap(frame: np.ndarray) -> QPixmap:
 
 
 def _sync_binarize(detector: ColorRingDetector, frame: np.ndarray) -> np.ndarray:
-    """在线程池中运行异步二值化函数"""
+    """在线程池中运行异步二值化函数。"""
     coro = detector.binarization(frame)
     try:
         loop = asyncio.new_event_loop()
@@ -61,7 +59,7 @@ def _sync_binarize(detector: ColorRingDetector, frame: np.ndarray) -> np.ndarray
 def _sync_get_circles(
     detector: ColorRingDetector, binary: np.ndarray
 ) -> Optional[list[tuple[int, int, int]]]:
-    """在线程池中运行异步霍夫圆检测函数"""
+    """在线程池中运行异步霍夫圆检测函数。"""
     coro = detector.get_circles(binary)
     try:
         loop = asyncio.new_event_loop()
@@ -73,7 +71,7 @@ def _sync_get_circles(
 def _draw_circle_overlay(
     frame: np.ndarray, circles: Optional[list[tuple[int, int, int]]]
 ) -> np.ndarray:
-    """在原图上绘制检测到的色环圆和圆心"""
+    """在原图上绘制检测到的色环圆和圆心。"""
     output = frame.copy()
     if circles:
         for x, y, r in circles:
@@ -83,7 +81,7 @@ def _draw_circle_overlay(
 
 
 class VideoPreview(QLabel):
-    """等比缩放、完整显示的视频预览标签"""
+    """等比缩放、完整显示的视频预览标签。"""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -118,143 +116,8 @@ class VideoPreview(QLabel):
             )
 
 
-class AdvancedParamSlider(QWidget):
-    """通用参数滑动条：支持整数/浮点数、步长、奇数约束"""
-
-    value_changed = pyqtSignal(float)
-
-    def __init__(
-        self,
-        name: str,
-        min_val: float,
-        max_val: float,
-        decimals: int = 0,
-        step: float = 1.0,
-        odd_only: bool = False,
-        parent: Optional[QWidget] = None,
-    ) -> None:
-        super().__init__(parent)
-        self._decimals = decimals
-        self._factor = 10**decimals
-        self._odd_only = odd_only
-        self._step = step
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        header = QHBoxLayout()
-        self._label = QLabel(name)
-        self._label.setStyleSheet(
-            f"color: {AppTheme.colors.foreground_secondary}; font-size: 13px;"
-        )
-        header.addWidget(self._label)
-
-        if decimals > 0:
-            self._spin = QDoubleSpinBox()
-            self._spin.setDecimals(decimals)
-            self._spin.setSingleStep(step)
-            self._spin.setRange(min_val, max_val)
-        else:
-            self._spin = QSpinBox()
-            self._spin.setSingleStep(int(step))
-            self._spin.setRange(int(min_val), int(max_val))
-
-        self._spin.setFixedWidth(80)
-        self._spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self._spin.valueChanged.connect(self._on_spin_changed)
-        header.addWidget(self._spin)
-
-        layout.addLayout(header)
-
-        slider_min = int(min_val * self._factor)
-        slider_max = int(max_val * self._factor)
-        slider_step = max(1, int(step * self._factor))
-
-        self._slider = QSlider(Qt.Orientation.Horizontal)
-        self._slider.setRange(slider_min, slider_max)
-        self._slider.setSingleStep(slider_step)
-        self._slider.setPageStep(slider_step * 5)
-        self._slider.setTracking(False)
-        self._slider.valueChanged.connect(self._on_slider_changed)
-        self._slider.sliderMoved.connect(self._on_slider_moved)
-        layout.addWidget(self._slider)
-
-    def _to_real(self, slider_value: int) -> float:
-        real = slider_value / self._factor
-        if self._decimals == 0:
-            real = int(real)
-        if self._odd_only and isinstance(real, int):
-            if real % 2 == 0:
-                real = max(1, real + 1)
-        return real
-
-    def _to_slider(self, real_value: float) -> int:
-        if self._odd_only:
-            v = int(real_value)
-            if v % 2 == 0:
-                v = max(1, v + 1)
-            return int(v * self._factor)
-        return int(round(real_value * self._factor))
-
-    def _set_spin_value(self, value: float) -> None:
-        if isinstance(self._spin, QSpinBox):
-            self._spin.setValue(int(value))
-        else:
-            self._spin.setValue(value)
-
-    def _spin_value(self) -> float:
-        return float(self._spin.value())
-
-    def _on_slider_moved(self, value: int) -> None:
-        """拖动过程中实时更新数值框，但不触发保存/预览"""
-        real = self._to_real(value)
-        self._spin.blockSignals(True)
-        self._set_spin_value(real)
-        self._spin.blockSignals(False)
-
-    def _on_slider_changed(self, value: int) -> None:
-        """释放滑条时同步数值框并触发保存/预览"""
-        real = self._to_real(value)
-        self._spin.blockSignals(True)
-        self._set_spin_value(real)
-        self._spin.blockSignals(False)
-        self.value_changed.emit(float(real))
-
-    def _on_spin_changed(self, value: float) -> None:
-        if self._odd_only:
-            v = int(value)
-            if v % 2 == 0:
-                v = max(1, v + 1)
-                self._spin.blockSignals(True)
-                self._set_spin_value(v)
-                self._spin.blockSignals(False)
-                value = v
-        slider_value = self._to_slider(value)
-        self._slider.blockSignals(True)
-        self._slider.setValue(slider_value)
-        self._slider.blockSignals(False)
-        self.value_changed.emit(float(value))
-
-    def value(self) -> float:
-        return self._spin_value()
-
-    def set_value(self, value: float) -> None:
-        if self._odd_only:
-            v = int(value)
-            if v % 2 == 0:
-                v = max(1, v + 1)
-            value = float(v)
-        self._spin.blockSignals(True)
-        self._slider.blockSignals(True)
-        self._set_spin_value(value)
-        self._slider.setValue(self._to_slider(value))
-        self._spin.blockSignals(False)
-        self._slider.blockSignals(False)
-
-
 class ColorRingTunerScreen(QWidget):
-    """色环调参页面"""
+    """色环调参页面。"""
 
     _preview_ready = pyqtSignal(np.ndarray, np.ndarray, object)
 
@@ -269,6 +132,7 @@ class ColorRingTunerScreen(QWidget):
         self._frame_source_manager = frame_source_manager
         self._app_config = config_bridge.config
 
+        self._schema = ColorRingDetector.TUNABLE_PARAMS
         self._detector = ColorRingDetector()
         self._update_detector_from_config()
 
@@ -320,47 +184,20 @@ class ColorRingTunerScreen(QWidget):
         )
         panel_layout.addWidget(title)
 
-        # 参数分组 Tab
+        # 参数分组 Tab：根据 schema.groups 顺序动态创建
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.setElideMode(Qt.TextElideMode.ElideNone)
         self._tabs.tabBar().setExpanding(False)
 
-        self._sliders: dict[str, AdvancedParamSlider] = {}
-
-        preprocess_tab = self._build_group_tab(
-            [
-                ("erode_iter", "腐蚀迭代", 0, 10, 0, 1, False),
-                ("dilate_kernel_size", "膨胀核大小", 3, 15, 0, 2, True),
-                ("clahe_clip_limit", "CLAHE 限制", 0.5, 10.0, 1, 0.1, False),
-                ("clahe_tile_size", "CLAHE 网格", 2, 16, 0, 1, False),
-            ]
-        )
-        self._tabs.addTab(preprocess_tab, "预处理")
-
-        hough_tab = self._build_group_tab(
-            [
-                ("hough_dp", "霍夫分辨率", 0.1, 3.0, 1, 0.1, False),
-                ("hough_min_dist", "圆心最小距", 0, 200, 0, 1, False),
-                ("hough_param1", "Canny 阈值", 0, 255, 0, 1, False),
-                ("hough_param2", "累加器阈值", 1, 255, 0, 1, False),
-                ("min_radius", "最小半径", 0, 900, 0, 1, False),
-                ("max_radius", "最大半径", 0, 900, 0, 1, False),
-                ("expected_circles", "期望圆数", 1, 10, 0, 1, False),
-            ]
-        )
-        self._tabs.addTab(hough_tab, "霍夫检测")
-
-        postprocess_tab = self._build_group_tab(
-            [
-                ("morph_kernel_size", "形态学核", 3, 15, 0, 2, True),
-                ("gaussian_kernel_size", "高斯核", 3, 15, 0, 2, True),
-                ("gaussian_sigma", "高斯 sigma", 0.1, 5.0, 1, 0.1, False),
-                ("alpha", "对比度增强", 0.1, 10.0, 1, 0.1, False),
-                ("threshold_value", "二值化阈值", 0, 255, 0, 1, False),
-            ]
-        )
-        self._tabs.addTab(postprocess_tab, "后处理")
+        self._group_panels: dict[str, ParameterGroupPanel] = {}
+        params_by_group = self._schema.params_by_group()
+        for group in self._schema.groups or []:
+            params = params_by_group.get(group, [])
+            group_panel = ParameterGroupPanel(params)
+            group_panel.value_changed.connect(self._on_slider_changed)
+            self._group_panels[group] = group_panel
+            self._tabs.addTab(group_panel, group)
 
         panel_layout.addWidget(self._tabs)
 
@@ -409,26 +246,6 @@ class ColorRingTunerScreen(QWidget):
         # 初始加载
         self._load_values()
 
-    def _build_group_tab(
-        self,
-        defs: list[tuple[str, str, float, float, int, float, bool]],
-    ) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 12, 0, 0)
-        layout.setSpacing(12)
-
-        for key, label, min_v, max_v, decimals, step, odd in defs:
-            slider = AdvancedParamSlider(
-                label, min_v, max_v, decimals=decimals, step=step, odd_only=odd
-            )
-            slider.value_changed.connect(self._on_slider_changed)
-            self._sliders[key] = slider
-            layout.addWidget(slider)
-
-        layout.addStretch()
-        return tab
-
     def _update_detector_from_config(self) -> None:
         cfg = self._app_config.color_ring
         for key, value in cfg.items():
@@ -437,21 +254,22 @@ class ColorRingTunerScreen(QWidget):
 
     def _load_values(self) -> None:
         cfg = self._app_config.color_ring
-        for key, slider in self._sliders.items():
-            if key in cfg:
-                slider.set_value(float(cfg[key]))
+        for panel in self._group_panels.values():
+            values = {key: cfg.get(key, 0) for key in panel.keys()}
+            panel.set_values(values)
 
     def _store_values(self) -> None:
         cfg = self._app_config.color_ring
-        for key, slider in self._sliders.items():
-            real_value = slider.value()
-            if slider._decimals == 0:
-                real_value = int(real_value)
-            cfg[key] = real_value
-            if hasattr(self._detector, key):
-                setattr(self._detector, key, real_value)
+        for panel in self._group_panels.values():
+            for key, value in panel.get_values().items():
+                param = self._schema.get_param(key)
+                if param is not None and param.param_type == "int":
+                    value = int(value)
+                cfg[key] = value
+                if hasattr(self._detector, key):
+                    setattr(self._detector, key, value)
 
-    def _on_slider_changed(self, _value: float) -> None:
+    def _on_slider_changed(self, _key: str, _value: float) -> None:
         self._store_values()
         self._preview_timer.stop()
         self._preview_timer.start(300)

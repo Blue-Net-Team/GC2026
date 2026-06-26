@@ -3,8 +3,8 @@ Copyright (C) 2025 IVEN-CN(He Yunfeng)
 
 GC2026 桌面调参应用 - 颜色调参页面
 ====
-左侧显示实时原图与二值化 mask 预览，右侧提供 R/G/B 三色 HSV 参数滑动条。
-直接复用 detector.ColorDetect.TraditionalColorDetector 的识别逻辑。
+左侧显示实时原图与二值化 mask 预览，右侧基于 TraditionalColorDetector.TUNABLE_PARAMS
+动态渲染 R/G/B 颜色参数与全局参数滑条。
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSlider,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -33,13 +31,14 @@ from loguru import logger
 from app.core.config_bridge import ConfigBridge
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
+from app.ui.widgets.parameter_group_panel import ParameterGroupPanel
 from detector.ColorDetect import TraditionalColorDetector
 
 _log = logger.bind(module="ColorTunerScreen")
 
 
 def _sync_binarize(detector: TraditionalColorDetector, frame: np.ndarray) -> np.ndarray:
-    """在线程池中运行异步二值化函数（ detector.binarization 内部无 await，可直接驱动协程）"""
+    """在线程池中运行异步二值化函数。"""
     coro = detector.binarization(frame)
     try:
         loop = asyncio.new_event_loop()
@@ -51,7 +50,7 @@ def _sync_binarize(detector: TraditionalColorDetector, frame: np.ndarray) -> np.
 def _sync_get_position(
     detector: TraditionalColorDetector, mask: np.ndarray
 ) -> Optional[tuple[int, int, int, int]]:
-    """在线程池中运行异步位置检测函数"""
+    """在线程池中运行异步位置检测函数。"""
     coro = detector.get_color_position(mask)
     try:
         loop = asyncio.new_event_loop()
@@ -61,7 +60,7 @@ def _sync_get_position(
 
 
 def _draw_detection_overlay(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """在原图上绘制检测到的物料外接矩形和中心点"""
+    """在原图上绘制检测到的物料外接矩形和中心点。"""
     output = frame.copy()
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if contours:
@@ -74,7 +73,7 @@ def _draw_detection_overlay(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def _cv_to_pixmap(frame: np.ndarray) -> QPixmap:
-    """OpenCV BGR 帧转 QPixmap"""
+    """OpenCV BGR 帧转 QPixmap。"""
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w, ch = rgb.shape
     bytes_per_line = ch * w
@@ -83,7 +82,7 @@ def _cv_to_pixmap(frame: np.ndarray) -> QPixmap:
 
 
 class VideoPreview(QLabel):
-    """等比缩放、完整显示的视频预览标签"""
+    """等比缩放、完整显示的视频预览标签。"""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -118,74 +117,8 @@ class VideoPreview(QLabel):
             )
 
 
-class ParamSlider(QWidget):
-    """参数滑动条组件：标签 + 滑动条 + 数值输入框"""
-
-    value_changed = pyqtSignal(int)
-
-    def __init__(self, name: str, min_val: int, max_val: int, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        header = QHBoxLayout()
-        self._label = QLabel(name)
-        self._label.setStyleSheet(
-            f"color: {AppTheme.colors.foreground_secondary}; font-size: 13px;"
-        )
-        header.addWidget(self._label)
-
-        self._spin = QSpinBox()
-        self._spin.setRange(min_val, max_val)
-        self._spin.setFixedWidth(80)
-        self._spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self._spin.valueChanged.connect(self._on_spin_changed)
-        header.addWidget(self._spin)
-
-        layout.addLayout(header)
-
-        self._slider = QSlider(Qt.Orientation.Horizontal)
-        self._slider.setRange(min_val, max_val)
-        self._slider.setTracking(False)
-        self._slider.valueChanged.connect(self._on_slider_changed)
-        self._slider.sliderMoved.connect(self._on_slider_moved)
-        layout.addWidget(self._slider)
-
-    def _on_slider_moved(self, value: int) -> None:
-        """拖动过程中实时更新数值框，但不触发保存/预览"""
-        self._spin.blockSignals(True)
-        self._spin.setValue(value)
-        self._spin.blockSignals(False)
-
-    def _on_slider_changed(self, value: int) -> None:
-        """释放滑条时同步数值框并触发保存/预览"""
-        self._spin.blockSignals(True)
-        self._spin.setValue(value)
-        self._spin.blockSignals(False)
-        self.value_changed.emit(value)
-
-    def _on_spin_changed(self, value: int) -> None:
-        self._slider.blockSignals(True)
-        self._slider.setValue(value)
-        self._slider.blockSignals(False)
-        self.value_changed.emit(value)
-
-    def value(self) -> int:
-        return self._slider.value()
-
-    def set_value(self, value: int) -> None:
-        self._slider.blockSignals(True)
-        self._spin.blockSignals(True)
-        self._slider.setValue(value)
-        self._spin.setValue(value)
-        self._slider.blockSignals(False)
-        self._spin.blockSignals(False)
-
-
 class ColorTunerScreen(QWidget):
-    """颜色调参页面"""
+    """颜色调参页面。"""
 
     _preview_ready = pyqtSignal(np.ndarray, np.ndarray)
     _info_ready = pyqtSignal(object)
@@ -201,25 +134,21 @@ class ColorTunerScreen(QWidget):
         self._frame_source_manager = frame_source_manager
         self._app_config = config_bridge.config
 
-        self._current_color = "R"
-        self._detectors: dict[str, TraditionalColorDetector] = {
-            "R": TraditionalColorDetector(),
-            "G": TraditionalColorDetector(),
-            "B": TraditionalColorDetector(),
-        }
-        self._update_detectors_from_config()
+        self._schema = TraditionalColorDetector.TUNABLE_PARAMS
+        self._current_color = self._schema.color_groups[0] if self._schema.color_groups else "R"
+        self._detector = TraditionalColorDetector()
+        self._update_detector_from_config()
 
         self._latest_frame: Optional[np.ndarray] = None
         self._executor = ThreadPoolExecutor(max_workers=2)
 
-        # 300ms debounce 更新预览（必须在 _build_ui 之前创建，加载初始值时会触发 slider 信号）
+        # 300ms debounce 更新预览
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.timeout.connect(self._update_preview)
 
         self._build_ui()
 
-        # 信号
         self._frame_source_manager.frame_received.connect(self._on_frame_received)
         self._preview_ready.connect(self._on_preview_ready)
         self._info_ready.connect(self._on_info_ready)
@@ -254,43 +183,33 @@ class ColorTunerScreen(QWidget):
         panel_layout.setContentsMargins(20, 20, 20, 20)
         panel_layout.setSpacing(16)
 
-        # 标题
         title = QLabel("颜色调参")
         title.setStyleSheet(
             f"color: {AppTheme.colors.foreground_primary}; font-size: 22px; font-weight: 600;"
         )
         panel_layout.addWidget(title)
 
-        # 颜色 Tab
+        # 颜色 Tab + 全局 Tab
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._tabs.currentChanged.connect(self._on_tab_changed)
-        for color in ("R", "G", "B"):
-            self._tabs.addTab(QWidget(), color)
+
+        self._color_panels: dict[str, ParameterGroupPanel] = {}
+        color_params = self._schema.color_group_params
+        for color in self._schema.color_groups or []:
+            # 为每个颜色创建独立的 ParamDef 副本（section 已在 schema 展开时设置）
+            params = self._schema.params_by_section(color)
+            group_panel = ParameterGroupPanel(params)
+            group_panel.value_changed.connect(self._on_slider_changed)
+            self._color_panels[color] = group_panel
+            self._tabs.addTab(group_panel, color)
+
+        global_params = self._schema.global_params()
+        self._global_panel = ParameterGroupPanel(global_params)
+        self._global_panel.value_changed.connect(self._on_slider_changed)
+        self._tabs.addTab(self._global_panel, "全局")
+
         panel_layout.addWidget(self._tabs)
-
-        # 滑动条
-        sliders_layout = QVBoxLayout()
-        sliders_layout.setSpacing(12)
-
-        self._sliders: dict[str, ParamSlider] = {}
-        slider_defs = [
-            ("centre", "色相中心", 0, 180),
-            ("error", "色相容差", 0, 40),
-            ("L_S", "饱和度下限", 0, 255),
-            ("U_S", "饱和度上限", 0, 255),
-            ("L_V", "明度下限", 0, 255),
-            ("U_V", "明度上限", 0, 255),
-            ("min_area", "最小面积", 0, 30000),
-            ("max_area", "最大面积", 0, 30000),
-        ]
-        for key, label, min_v, max_v in slider_defs:
-            slider = ParamSlider(label, min_v, max_v)
-            slider.value_changed.connect(self._on_slider_changed)
-            self._sliders[key] = slider
-            sliders_layout.addWidget(slider)
-
-        panel_layout.addLayout(sliders_layout)
 
         # 检测信息
         self._info_card = QFrame()
@@ -334,66 +253,77 @@ class ColorTunerScreen(QWidget):
 
         main_layout.addWidget(panel)
 
-        # 初始加载当前颜色值
+        # 初始加载
         self._load_color_values(self._current_color)
+        self._load_global_values()
 
-    def _update_detectors_from_config(self) -> None:
-        for color in ("R", "G", "B"):
+    def _update_detector_from_config(self) -> None:
+        for color in self._schema.color_groups or []:
             cfg = self._app_config.color[color]
-            detector = self._detectors[color]
-            detector.color_threshold[color] = cfg.to_dict()
-            detector.min_material_area = self._app_config.min_material_area
-            detector.max_material_area = self._app_config.max_material_area
-            detector.update_threshold(color)
+            self._detector.color_threshold[color] = cfg.to_dict()
+        self._detector.min_material_area = self._app_config.min_material_area
+        self._detector.max_material_area = self._app_config.max_material_area
+        self._detector.update_threshold(self._current_color)
 
     def _load_color_values(self, color: str) -> None:
         cfg = self._app_config.color[color]
-        self._sliders["centre"].set_value(cfg.centre)
-        self._sliders["error"].set_value(cfg.error)
-        self._sliders["L_S"].set_value(cfg.L_S)
-        self._sliders["U_S"].set_value(cfg.U_S)
-        self._sliders["L_V"].set_value(cfg.L_V)
-        self._sliders["U_V"].set_value(cfg.U_V)
-        self._sliders["min_area"].set_value(self._app_config.min_material_area // 10)
-        self._sliders["max_area"].set_value(self._app_config.max_material_area // 10)
+        values = {key: getattr(cfg, key) for key in self._color_panels[color].keys()}
+        self._color_panels[color].set_values(values)
+
+    def _load_global_values(self) -> None:
+        values = {
+            "min_material_area": self._app_config.min_material_area,
+            "max_material_area": self._app_config.max_material_area,
+        }
+        self._global_panel.set_values(values)
 
     def _store_color_values(self, color: str) -> None:
         cfg = self._app_config.color[color]
-        cfg.centre = self._sliders["centre"].value()
-        cfg.error = self._sliders["error"].value()
-        cfg.L_S = self._sliders["L_S"].value()
-        cfg.U_S = self._sliders["U_S"].value()
-        cfg.L_V = self._sliders["L_V"].value()
-        cfg.U_V = self._sliders["U_V"].value()
-        self._app_config.min_material_area = self._sliders["min_area"].value() * 10
-        self._app_config.max_material_area = self._sliders["max_area"].value() * 10
+        values = self._color_panels[color].get_values()
+        for key, value in values.items():
+            setattr(cfg, key, int(value))
+            self._detector.color_threshold[color][key] = int(value)
+        self._detector.update_threshold(color)
 
-        detector = self._detectors[color]
-        detector.color_threshold[color] = cfg.to_dict()
-        detector.min_material_area = self._app_config.min_material_area
-        detector.max_material_area = self._app_config.max_material_area
-        detector.update_threshold(color)
+    def _store_global_values(self) -> None:
+        values = self._global_panel.get_values()
+        self._app_config.min_material_area = int(values.get("min_material_area", 0))
+        self._app_config.max_material_area = int(values.get("max_material_area", 0))
+        self._detector.min_material_area = self._app_config.min_material_area
+        self._detector.max_material_area = self._app_config.max_material_area
 
     def _on_tab_changed(self, index: int) -> None:
-        colors = ["R", "G", "B"]
-        new_color = colors[index]
-        if new_color == self._current_color:
+        colors = list(self._color_panels.keys()) + ["global"]
+        new_section = colors[index]
+        if new_section == self._current_color:
             return
-        self._store_color_values(self._current_color)
-        self._current_color = new_color
-        self._load_color_values(self._current_color)
 
-    def _on_slider_changed(self, _value: int) -> None:
-        # 立即保存当前颜色配置到内存
-        self._store_color_values(self._current_color)
-        # debounce 更新预览
+        # 切出前保存当前标签的值
+        if self._current_color in self._color_panels:
+            self._store_color_values(self._current_color)
+        elif self._current_color == "global":
+            self._store_global_values()
+
+        self._current_color = new_section
+
+        # 切换 detector 到新的颜色
+        if new_section in self._color_panels:
+            self._detector.update_threshold(new_section)
+            self._load_color_values(new_section)
+        elif new_section == "global":
+            self._load_global_values()
+
+    def _on_slider_changed(self, _key: str, _value: float) -> None:
+        if self._current_color in self._color_panels:
+            self._store_color_values(self._current_color)
+        elif self._current_color == "global":
+            self._store_global_values()
         self._preview_timer.stop()
         self._preview_timer.start(300)
 
     def _on_frame_received(self, frame: np.ndarray) -> None:
         self._latest_frame = frame
         self._video_preview.set_frame(frame)
-        # 如果预览计时器未在运行，立即触发一次
         if not self._preview_timer.isActive():
             self._update_preview()
 
@@ -402,13 +332,11 @@ class ColorTunerScreen(QWidget):
         if frame is None:
             return
 
-        color = self._current_color
-        detector = self._detectors[color]
+        detector = self._detector
 
         def _process() -> tuple[np.ndarray, np.ndarray]:
             mask = _sync_binarize(detector, frame)
             overlay = _draw_detection_overlay(frame, mask)
-            # mask 是单通道，转成 3 通道便于显示
             mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
             return overlay, mask_bgr
 
@@ -425,13 +353,11 @@ class ColorTunerScreen(QWidget):
 
     def _on_preview_ready(self, overlay: np.ndarray, mask_bgr: np.ndarray) -> None:
         self._mask_preview.set_frame(mask_bgr)
-        # 重绘带检测框的原图
         self._video_preview.set_frame(overlay)
-        # 继续计算检测位置
         self._update_info(overlay)
 
     def _update_info(self, frame: np.ndarray) -> None:
-        detector = self._detectors[self._current_color]
+        detector = self._detector
 
         def _get_pos() -> Optional[tuple[int, int, int, int]]:
             mask = _sync_binarize(detector, frame)
@@ -457,7 +383,10 @@ class ColorTunerScreen(QWidget):
             self._info_label.setText(f"目标: ({cx}, {cy}) 外接矩形: {w}x{h}")
 
     def _on_save(self) -> None:
-        self._store_color_values(self._current_color)
+        if self._current_color in self._color_panels:
+            self._store_color_values(self._current_color)
+        elif self._current_color == "global":
+            self._store_global_values()
         if self._config_bridge.save():
             self._info_label.setText("配置已保存到 config.yaml")
         else:
@@ -466,8 +395,9 @@ class ColorTunerScreen(QWidget):
     def _on_reset(self) -> None:
         self._config_bridge.reset_to_default()
         self._app_config = self._config_bridge.config
-        self._update_detectors_from_config()
+        self._update_detector_from_config()
         self._load_color_values(self._current_color)
+        self._load_global_values()
         self._info_label.setText("已恢复默认配置")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]

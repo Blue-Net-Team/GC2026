@@ -4,6 +4,8 @@ Copyright (C) 2025 IVEN-CN(He Yunfeng)
 GC2026 桌面调参应用 - 配置桥接
 ====
 负责与 GC2026 的 config.yaml 格式保持兼容，提供颜色/色环参数的读写。
+
+默认值优先从 detector 的 TUNABLE_PARAMS schema 推导，避免多处硬编码不一致。
 """
 
 from __future__ import annotations
@@ -16,55 +18,66 @@ from typing import Any, Optional
 import yaml
 from loguru import logger
 
+from detector.ColorDetect import TraditionalColorDetector
+from detector.ColorRingDetect import ColorRingDetector
+
 _log = logger.bind(module="ConfigBridge")
 
 
-DEFAULT_COLOR_PARAMS: dict[str, dict[str, int]] = {
-    "R": {"centre": 0, "error": 12, "L_S": 41, "L_V": 29, "U_S": 255, "U_V": 255},
-    "G": {"centre": 69, "error": 12, "L_S": 41, "L_V": 29, "U_S": 255, "U_V": 255},
-    "B": {"centre": 108, "error": 12, "L_S": 41, "L_V": 29, "U_S": 255, "U_V": 255},
-}
+def _default_color_params() -> dict[str, dict[str, int]]:
+    """从 TraditionalColorDetector 推导颜色默认参数。"""
+    schema = TraditionalColorDetector.TUNABLE_PARAMS
+    result: dict[str, dict[str, int]] = {}
+    for color in schema.color_groups or []:
+        result[color] = {
+            p.key: int(TraditionalColorDetector.color_threshold[color][p.key])
+            for p in schema.color_group_params
+        }
+    return result
 
-DEFAULT_COLOR_RING_PARAMS: dict[str, Any] = {
-    "alpha": 4.4,
-    "clahe_clip_limit": 1.2,
-    "clahe_tile_size": 8,
-    "dilate_kernel_size": 5,
-    "erode_iter": 1,
-    "expected_circles": 5,
-    "gaussian_kernel_size": 9,
-    "gaussian_sigma": 1.5,
-    "hough_dp": 0.9,
-    "hough_min_dist": 68,
-    "hough_param1": 72,
-    "hough_param2": 100,
-    "max_radius": 281,
-    "min_radius": 54,
-    "morph_kernel_size": 3,
-    "threshold_value": 34,
-}
+
+def _default_color_ring_params() -> dict[str, Any]:
+    """从 ColorRingDetector 推导色环默认参数。"""
+    schema = ColorRingDetector.TUNABLE_PARAMS
+    result: dict[str, Any] = {}
+    for p in schema.params:
+        value = getattr(ColorRingDetector, p.key)
+        if p.param_type == "int":
+            value = int(value)
+        result[p.key] = value
+    return result
+
+
+DEFAULT_COLOR_PARAMS: dict[str, dict[str, int]] = _default_color_params()
+DEFAULT_COLOR_RING_PARAMS: dict[str, Any] = _default_color_ring_params()
+
+
+def _color_config_defaults() -> dict[str, int]:
+    """ColorConfig 的字段默认值取自 R 颜色。"""
+    return copy.deepcopy(DEFAULT_COLOR_PARAMS["R"])
 
 
 @dataclass
 class ColorConfig:
     """颜色调参配置"""
 
-    centre: int = 0
-    error: int = 12
-    L_S: int = 41
-    U_S: int = 255
-    L_V: int = 29
-    U_V: int = 255
+    centre: int = field(default_factory=lambda: _color_config_defaults()["centre"])
+    error: int = field(default_factory=lambda: _color_config_defaults()["error"])
+    L_S: int = field(default_factory=lambda: _color_config_defaults()["L_S"])
+    U_S: int = field(default_factory=lambda: _color_config_defaults()["U_S"])
+    L_V: int = field(default_factory=lambda: _color_config_defaults()["L_V"])
+    U_V: int = field(default_factory=lambda: _color_config_defaults()["U_V"])
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ColorConfig":
+        defaults = _color_config_defaults()
         return cls(
-            centre=int(data.get("centre", 0)),
-            error=int(data.get("error", 12)),
-            L_S=int(data.get("L_S", 41)),
-            U_S=int(data.get("U_S", 255)),
-            L_V=int(data.get("L_V", 29)),
-            U_V=int(data.get("U_V", 255)),
+            centre=int(data.get("centre", defaults["centre"])),
+            error=int(data.get("error", defaults["error"])),
+            L_S=int(data.get("L_S", defaults["L_S"])),
+            U_S=int(data.get("U_S", defaults["U_S"])),
+            L_V=int(data.get("L_V", defaults["L_V"])),
+            U_V=int(data.get("U_V", defaults["U_V"])),
         )
 
     def to_dict(self) -> dict[str, int]:
@@ -89,8 +102,8 @@ class AppConfig:
         }
     )
     color_ring: dict[str, Any] = field(default_factory=lambda: copy.deepcopy(DEFAULT_COLOR_RING_PARAMS))
-    min_material_area: int = 5940
-    max_material_area: int = 300000
+    min_material_area: int = field(default_factory=lambda: int(TraditionalColorDetector.min_material_area))
+    max_material_area: int = field(default_factory=lambda: int(TraditionalColorDetector.max_material_area))
     need2cut_height: int = 0
     target_angle: int = 46
 
@@ -99,13 +112,13 @@ class AppConfig:
         color_data = data.get("color", DEFAULT_COLOR_PARAMS)
         color = {
             name: ColorConfig.from_dict(color_data.get(name, DEFAULT_COLOR_PARAMS[name]))
-            for name in ("R", "G", "B")
+            for name in DEFAULT_COLOR_PARAMS.keys()
         }
         return cls(
             color=color,
             color_ring={**DEFAULT_COLOR_RING_PARAMS, **data.get("color_ring", {})},
-            min_material_area=int(data.get("min_material_area", 5940)),
-            max_material_area=int(data.get("max_material_area", 300000)),
+            min_material_area=int(data.get("min_material_area", TraditionalColorDetector.min_material_area)),
+            max_material_area=int(data.get("max_material_area", TraditionalColorDetector.max_material_area)),
             need2cut_height=int(data.get("need2cut_height", 0)),
             target_angle=int(data.get("target_angle", 46)),
         )

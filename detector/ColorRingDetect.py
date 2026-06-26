@@ -53,6 +53,9 @@ import numpy as np
 from loguru import logger
 from .Detect import Detect
 
+# app 调参 UI 通过该 schema 动态渲染滑条
+from .schema import DetectorSchema, ParamDef
+
 _log = logger.bind(module="ColorRingDetector")
 
 class ColorRingDetector(Detect):
@@ -119,6 +122,32 @@ class ColorRingDetector(Detect):
     min_radius: int = 80  # 检测圆最小半径
     max_radius: int = 280  # 检测圆最大半径
     expected_circles: int = 5  # 期望检测的圆数量
+
+    # 调参 UI 使用的参数 schema
+    TUNABLE_PARAMS = DetectorSchema(
+        name="color_ring",
+        groups=["预处理", "霍夫检测", "后处理"],
+        params=[
+            ParamDef("erode_iter", "腐蚀迭代", "int", 0, 10, group="预处理"),
+            ParamDef("dilate_kernel_size", "膨胀核大小", "int", 3, 15, step=2, odd_only=True, group="预处理"),
+            ParamDef("clahe_clip_limit", "CLAHE 限制", "float", 0.5, 10.0, decimals=1, step=0.1, group="预处理"),
+            ParamDef("clahe_tile_size", "CLAHE 网格", "int", 2, 16, group="预处理"),
+
+            ParamDef("hough_dp", "霍夫分辨率", "float", 0.1, 3.0, decimals=1, step=0.1, group="霍夫检测"),
+            ParamDef("hough_min_dist", "圆心最小距", "int", 0, 200, group="霍夫检测"),
+            ParamDef("hough_param1", "Canny 阈值", "int", 0, 255, group="霍夫检测"),
+            ParamDef("hough_param2", "累加器阈值", "int", 1, 255, group="霍夫检测"),
+            ParamDef("min_radius", "最小半径", "int", 0, 900, group="霍夫检测"),
+            ParamDef("max_radius", "最大半径", "int", 0, 900, group="霍夫检测"),
+            ParamDef("expected_circles", "期望圆数", "int", 1, 10, group="霍夫检测"),
+
+            ParamDef("morph_kernel_size", "形态学核", "int", 3, 15, step=2, odd_only=True, group="后处理"),
+            ParamDef("gaussian_kernel_size", "高斯核", "int", 3, 15, step=2, odd_only=True, group="后处理"),
+            ParamDef("gaussian_sigma", "高斯 sigma", "float", 0.1, 5.0, decimals=1, step=0.1, group="后处理"),
+            ParamDef("alpha", "对比度增强", "float", 0.1, 10.0, decimals=1, step=0.1, group="后处理"),
+            ParamDef("threshold_value", "二值化阈值", "int", 0, 255, group="后处理"),
+        ],
+    )
 
     @property
     def dilate_kernel(self):
@@ -372,19 +401,19 @@ class ColorRingDetector(Detect):
             _log.warning(f"配置文件 {config} 中没有 {circle_type} 的配置项")
             pass
 
-        super().load_param(config_dict, "erode_iter", default=2)
-        super().load_param(config_dict, "dilate_kernel_size", default=7)
-        super().load_param(config_dict, "clahe_clip_limit", default=5.0)
-        super().load_param(config_dict, "clahe_tile_size", default=8)
-        super().load_param(config_dict, "morph_kernel_size", default=5)
-        super().load_param(config_dict, "gaussian_kernel_size", default=7)
-        super().load_param(config_dict, "gaussian_sigma", default=3.0)
-        super().load_param(config_dict, "alpha", default=4.0)
-        super().load_param(config_dict, "threshold_value", default=70)
-        super().load_param(config_dict, "hough_dp", default=1.5)
-        super().load_param(config_dict, "hough_min_dist", default=50)
-        super().load_param(config_dict, "hough_param1", default=100)
-        super().load_param(config_dict, "hough_param2", default=0.95)
-        super().load_param(config_dict, "min_radius", default=15)
-        super().load_param(config_dict, "max_radius", default=50)
-        super().load_param(config_dict, "expected_circles", default=3)
+        super().load_param(config_dict, "erode_iter", default=getattr(type(self), "erode_iter"))
+        super().load_param(config_dict, "dilate_kernel_size", default=getattr(type(self), "dilate_kernel_size"))
+        super().load_param(config_dict, "clahe_clip_limit", default=getattr(type(self), "clahe_clip_limit"))
+        super().load_param(config_dict, "clahe_tile_size", default=getattr(type(self), "clahe_tile_size"))
+        super().load_param(config_dict, "morph_kernel_size", default=getattr(type(self), "morph_kernel_size"))
+        super().load_param(config_dict, "gaussian_kernel_size", default=getattr(type(self), "gaussian_kernel_size"))
+        super().load_param(config_dict, "gaussian_sigma", default=getattr(type(self), "gaussian_sigma"))
+        super().load_param(config_dict, "alpha", default=getattr(type(self), "alpha"))
+        super().load_param(config_dict, "threshold_value", default=getattr(type(self), "threshold_value"))
+        super().load_param(config_dict, "hough_dp", default=getattr(type(self), "hough_dp"))
+        super().load_param(config_dict, "hough_min_dist", default=getattr(type(self), "hough_min_dist"))
+        super().load_param(config_dict, "hough_param1", default=getattr(type(self), "hough_param1"))
+        super().load_param(config_dict, "hough_param2", default=getattr(type(self), "hough_param2"))
+        super().load_param(config_dict, "min_radius", default=getattr(type(self), "min_radius"))
+        super().load_param(config_dict, "max_radius", default=getattr(type(self), "max_radius"))
+        super().load_param(config_dict, "expected_circles", default=getattr(type(self), "expected_circles"))

@@ -220,7 +220,14 @@ class TraditionalColorDetector(Detect):
         return getattr(self, key)
 
     def set_tunable_value(self, key: str, value, section: str | None = None):
-        """写入可调参数值。section 为 R/G/B 时写入 color_threshold，否则写入类属性。"""
+        """写入可调参数值。section 为 R/G/B 时写入 color_threshold，否则写入类属性。
+
+        如果参数为 int 类型，自动四舍五入为整数，避免 UI 传回 float 导致 OpenCV 报错。
+        """
+        param = self.tunable_schema().get_param(key, section)
+        if param is not None and param.param_type == "int":
+            value = int(round(value))
+
         if section in (self.color_groups or []):
             self.color_threshold[section][key] = value
         else:

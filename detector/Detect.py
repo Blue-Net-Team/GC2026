@@ -56,7 +56,13 @@ class Detect(ConfigLoader):
     def set_tunable_value(
         self, key: str, value: Any, section: Optional[str] = None
     ) -> None:
-        """写入单个可调参数的实际值。section 对平铺参数 detector 可忽略。"""
+        """写入单个可调参数的实际值。section 对平铺参数 detector 可忽略。
+
+        如果参数在 schema 中声明为 int，则自动四舍五入为整数，避免 UI 传回 float 导致 OpenCV 报错。
+        """
+        param = self.tunable_schema().get_param(key, section)
+        if param is not None and param.param_type == "int":
+            value = int(round(value))
         setattr(self, key, value)
 
     def load_tunable_from_app_config(self, app_config: Any) -> None:

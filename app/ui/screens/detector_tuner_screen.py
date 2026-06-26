@@ -305,9 +305,11 @@ class DetectorTunerScreen(QWidget):
         if panel is None:
             return
 
+        # group-tabs/flat 不使用 section，避免 get_param 按 section 查找失败
+        param_section = section if self._schema.color_groups else None
         values: dict[str, Any] = {}
         for param in self._params_for_section(section):
-            values[param.key] = self._detector.get_tunable_value(param.key, section=section)
+            values[param.key] = self._detector.get_tunable_value(param.key, section=param_section)
         panel.set_values(values)
 
     def _store_current_tab_values(self) -> None:
@@ -316,8 +318,10 @@ class DetectorTunerScreen(QWidget):
         if panel is None:
             return
 
+        # group-tabs/flat 不使用 section，确保 set_tunable_value 能按 schema 找到 ParamDef 并做 int 截断
+        param_section = section if self._schema.color_groups else None
         for key, value in panel.get_values().items():
-            self._detector.set_tunable_value(key, value, section=section)
+            self._detector.set_tunable_value(key, value, section=param_section)
 
         # 颜色检测：更新当前工作颜色到类属性
         if self._schema.color_groups and section in self._schema.color_groups:

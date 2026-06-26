@@ -224,7 +224,10 @@ class TraditionalColorDetector(Detect):
 
         如果参数为 int 类型，自动四舍五入为整数，避免 UI 传回 float 导致 OpenCV 报错。
         """
-        param = self.tunable_schema().get_param(key, section)
+        schema = self.tunable_schema()
+        param = schema.get_param(key, section)
+        if param is None:
+            param = schema.get_param(key)
         if param is not None and param.param_type == "int":
             value = int(round(value))
 

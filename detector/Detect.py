@@ -60,7 +60,10 @@ class Detect(ConfigLoader):
 
         如果参数在 schema 中声明为 int，则自动四舍五入为整数，避免 UI 传回 float 导致 OpenCV 报错。
         """
-        param = self.tunable_schema().get_param(key, section)
+        schema = self.tunable_schema()
+        param = schema.get_param(key, section)
+        if param is None:
+            param = schema.get_param(key)
         if param is not None and param.param_type == "int":
             value = int(round(value))
         setattr(self, key, value)

@@ -275,6 +275,303 @@ color:
 
 ***
 
+## 开发指南
+
+### 1. 整体架构
+
+GC2026 运行时分为三层：
+
+| 层级 | 代表文件/目录 | 职责 |
+|------|---------------|------|
+| **main 层** | `main.py` | 程序入口与事件循环，编排图像处理 / OLED / 图传三个协程；读取串口任务、回传结果、准备待发送图像 |
+| **应用层** | `applications.py` | 业务调度器，根据任务字调用对应识别器，并把识别结果转换为对外格式 |
+| **基础设施层** | `utils/`、`ImgTrans/`、`detector/` | 提供硬件抽象、UDP 图传、配置加载、视觉算法等可复用能力 |
+
+`app/`（PyQt6 桌面调参）和 `setup.py`（OpenCV Trackbar 命令行工具）都是**调参工具**，它们直接调用基础设施中的识别器来调试参数、生成 `config.yaml`，**不参与 `main.py` 的运行时闭环**。
+
+```
+        调参工具
+   ┌─────────────────┐
+   │  app/  | setup  │
+   │  调参界面/Trackbar│
+   └────────┬────────┘
+            │ 调用识别器接口
+            ▼
+   ┌─────────────────────────────┐
+   │        基础设施层            │
+   │  ┌─────────────────────┐    │
+   │  │   detector/         │    │
+   │  │   算法基础设施       │    │
+   │  │  TUNABLE_PARAMS     │    │
+   │  │  detect()           │    │
+   │  └─────────────────────┘    │
+   │  ┌─────────────────────┐    │
+   │  │      utils/         │    │
+   │  │  硬件/配置基础设施   │    │
+   │  └─────────────────────┘    │
+   │  ┌─────────────────────┐    │
+   │  │    ImgTrans/        │    │
+   │  │    通信基础设施      │    │
+   │  └─────────────────────┘    │
+   └─────────────┬───────────────┘
+                 │
+                 ▼
+   ┌─────────────────────────────┐
+   │        应用层                │
+   │    applications.py           │
+   │  按任务字调度识别器并处理结果  │
+   └─────────────┬───────────────┘
+                 │
+                 ▼
+   ┌─────────────────────────────┐
+   │        main 层               │
+   │       main.py                │
+   │  串口读取 → 调用应用层 → 回传  │
+   │  准备图传图像 / OLED 显示      │
+   └─────────────────────────────┘
+```
+
+### 2. main 层、应用层与基础设施层
+
+#### main 层
+
+`main.py` 是嵌入式主程序的入口，负责：
+
+- 通过 `asyncio.gather` 并行运行三个协程：`main()`（图像处理）、`board_show()`（OLED 状态显示）、`img_trans()`（UDP 图传）；
+- 在 `main()` 协程中通过 `Uart` 读取 `@...#` 格式的串口任务字；
+- 根据 `TASK_TABLE` 调用 `applications.py` 中的对应方法；
+- 把识别结果通过 `Uart` 写回；
+- 把可视化图像 `res_img` 放入 `img_need_to_send`，供 `img_trans()` 发送；
+- 读取拨码开关切换 `RUN_MODE`（`main` / `debug`）。
+
+`main.py` 本身**不包含视觉算法细节**，只负责“读任务 → 调用应用层 → 发结果 → 发图传”。
+
+#### TASK_TABLE 与任务字扩展
+
+`main.py` 中的 `TASK_TABLE` 定义了“串口任务字 → 应用层方法”的映射：
+
+```python
+TASK_TABLE = {
+    "R": (applications.detect_material, "R"),
+    "G": (applications.detect_material, "G"),
+    "B": (applications.detect_material, "B"),
+    "C": (applications.detect_circle, None),
+}
+```
+
+每个条目是一个二元组：
+
+- 第 1 个元素：`Applications` 的方法对象（函数指针）；
+- 第 2 个元素：调用时传入的附加参数（如颜色标签），不需要时传 `None`。
+
+当 `main()` 协程读到任务字后，会这样调用：
+
+```python
+res, res_img = await TASK_TABLE[task_sign][0](
+    img, TASK_TABLE[task_sign][1]
+)
+```
+
+**应用层方法签名要求**
+
+被 `TASK_TABLE` 指向的方法必须满足以下约定：
+
+- 必须是协程：`async def ...`，因为 `main.py` 使用 `await` 调用；
+- 第一个参数为 `self`；
+- 第二个参数为 `img: cv2.typing.MatLike`，即当前帧原始图像；
+- 第三个参数（可选）用于接收 `TASK_TABLE` 中的附加参数，建议写成 `label=None` 并给默认值；
+- 返回值必须是二元组 `(coord, draw_img)`：
+  - `coord`：识别到的坐标，传 `None` 表示未识别到，或传 `(x, y)` 元组；`main.py` 会把它交给 `Applications.tuple2str()` 转换成固定长度字符串后写回串口；
+  - `draw_img`：`np.ndarray` 类型可视化图像，会被 `main.py` 放入 `img_need_to_send` 通过 UDP 发送给客户端。
+
+示例签名：
+
+```python
+async def detect_my_target(
+    self,
+    img: cv2.typing.MatLike,
+    label=None,
+) -> tuple[tuple[int, int] | None, np.ndarray]:
+    ...
+    return (cx, cy), draw_img
+```
+
+**新增一个任务字的标准流程**：
+
+1. 在 `applications.py` 的 `Applications` 类中新增一个业务方法，签名一般为：
+   ```python
+   async def detect_my_target(self, img: cv2.typing.MatLike, label=None) -> tuple[tuple|None, np.ndarray]:
+       ...
+       return coord, draw_img
+   ```
+2. 在 `main.py` 的 `TASK_TABLE` 中新增映射：
+   ```python
+   TASK_TABLE = {
+       ...
+       "M": (applications.detect_my_target, None),
+   }
+   ```
+3. 如果该方法依赖新的识别器，还需要：
+   - 在 `Applications.__init__()` 中实例化并加载该识别器；
+   - 在 `detector/` 中实现该识别器并声明 `TUNABLE_PARAMS`；
+   - （可选）在 `app/ui/main_window.py` 的 `DETECTOR_REGISTRY` 中注册，以在桌面端提供调参页面。
+
+#### 应用层
+
+`applications.py` 中的 `Applications` 类是**业务方法集合**：
+
+- 持有所有识别器实例（如 `colorDetector`、`colorRingDetector`），并在初始化时加载 `config.yaml`；
+- 为每种任务提供封装好的业务方法（如 `detect_material()`、`detect_circle()`），供 `main.py` 的 `TASK_TABLE` 调用；
+- 在方法内部调用识别器的 `detect()` / `visualize()`，得到坐标 `coord` 和可视化图像 `draw_img`；
+- 通过 `tuple2str()` 把坐标转换为固定长度字符串，供 `main.py` 回写串口。
+
+应用层**不负责“看到哪个任务字就调用谁”**，这个映射由 `main.py` 的 `TASK_TABLE` 维护；应用层也**不直接读写串口、不直接发送图传、不直接操作 GPIO**，这些工作全部交给 `main.py` 和基础设施层。
+
+#### 基础设施层
+
+基础设施层是被上层调用的**可复用能力集合**，包含三类：
+
+| 子层 | 目录 | 说明 |
+|------|------|------|
+| **算法基础设施** | `detector/` | 识别器基类 `Detect` 与具体识别器，提供纯 OpenCV 视觉服务 |
+| **硬件/配置基础设施** | `utils/` | 摄像头 `Cap`、串口 `Uart`、GPIO、OLED、`ConfigLoader` 等 |
+| **通信基础设施** | `ImgTrans/` | UDP 分片图传 `SendImgUDP` / `ReceiveImgUDP` |
+
+识别器虽然封装的是视觉算法，但它不持有业务状态、不参与任务调度，只是被应用层调用的“算法服务”，因此归入基础设施层。
+
+### 3. 调参工具如何调用识别器
+
+- **`setup.py`**：直接导入识别器并调用 `createTrackbar()`，用 OpenCV 窗口调参；
+- **`app/`**：`app/ui/main_window.py` 维护 `DETECTOR_REGISTRY`，为每个注册识别器自动创建一个 `DetectorTunerScreen`；`DetectorTunerScreen` 通过识别器的通用接口完成参数读写和实时预览。
+
+### 4. 什么是识别器（Detector）
+
+**识别器是基础设施层中封装了单一视觉任务的算法单元**。在 GC2026 中，它同时向两类消费者提供服务：
+
+- **运行时消费者**：`applications.py` 在串口任务到来时调用它，得到坐标和带标记的可视化图像；
+- **调参消费者**：`app/` 和 `setup.py` 读取它的参数定义，动态生成滑条和预览界面。
+
+因此，识别器必须是**自描述、自读写、自预览、自持久化**的：
+
+- **自描述**：通过 `TUNABLE_PARAMS` 告诉外部自己有哪些可调参数、范围、分组；
+- **自读写**：通过 `get_tunable_value()` / `set_tunable_value()` 让外部不需要知道参数是类属性还是嵌套字典；
+- **自预览**：通过 `detect()` / `draw_overlay()` / `format_detection_info()` 输出可拼接的预览图和文字信息；
+- **自持久化**：通过 `load_config()` / `save_config()` 与 `config.yaml` 交互。
+
+当前已实现的识别器：
+
+| 文件 | 类 | 任务 | 参数形态 |
+|------|-----|------|----------|
+| `detector/ColorDetect.py` | `TraditionalColorDetector` | 物料颜色检测 | 按颜色 `R/G/B` 分组 + `global` 全局参数 |
+| `detector/ColorRingDetect.py` | `ColorRingDetector` | 地面色环检测 | 按处理阶段 `预处理/霍夫检测/后处理` 分组 |
+
+### 5. 识别器开发契约
+
+新建识别器必须继承 `Detect`（`detector/Detect.py`），并至少实现以下接口：
+
+```python
+class MyDetector(Detect):
+    # 1. 可调参数声明
+    TUNABLE_PARAMS = DetectorSchema(...)
+
+    # 2. 参数读写（平铺参数可直接用基类默认实现）
+    def get_tunable_value(self, key, section=None): ...
+    def set_tunable_value(self, key, value, section=None): ...
+    def load_tunable_from_app_config(self, app_config): ...
+    def save_tunable_to_app_config(self, app_config): ...
+
+    # 3. 运行时/预览接口（必须实现）
+    async def detect(self, frame: np.ndarray) -> tuple[Any, np.ndarray]: ...
+    def draw_overlay(self, frame, result, binary) -> np.ndarray: ...
+    def format_detection_info(self, result) -> str: ...
+
+    # 4. 配置持久化（推荐）
+    def load_config(self, config: str | dict): ...
+    def save_config(self, path: str): ...
+```
+
+`Detect` 基类已提供默认的 `visualize()`，内部会把 `draw_overlay()` 的输出与 `binary` 纵向拼接，供 `applications.py` 直接调用。
+
+参数 Schema 在 `detector/schema.py` 中定义：
+
+- `ParamDef`：单个参数，包含 `key`（属性名/配置 key）、`label`（中文显示名）、`param_type`（`int`/`float`）、`min`/`max`、`step`、`decimals`、`scale`、`group`、`section` 等；
+- `DetectorSchema`：一个识别器的全部参数，支持三种布局：
+  - `color_groups` 非空 → `color-tabs` 布局（颜色检测）；
+  - `groups` 非空 → `group-tabs` 布局（色环检测）；
+  - 两者皆空 → `flat` 单面板布局。
+
+详细的模板和示例请见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+
+### 6. App 如何动态调参
+
+桌面调参应用 `app/` 不会为每个识别器写死页面，而是通过 `DetectorSchema` 动态渲染：
+
+1. **注册**：在 `app/ui/main_window.py` 的 `DETECTOR_REGISTRY` 中添加识别器类、页面标题、图标等信息；
+2. **自动创建页面**：`MainWindow` 遍历注册表，为每个条目实例化 `DetectorTunerScreen(detector_cls, title, config_bridge, frame_source_manager)`；
+3. **加载当前值**：`DetectorTunerScreen` 创建识别器实例后，调用 `load_tunable_from_app_config(app_config)` 把 `config.yaml` 中的值写入识别器；
+4. **渲染 UI**：根据 `tunable_schema()` 返回的 Schema 自动选择 `color-tabs` / `group-tabs` / `flat` 布局，并创建滑条；
+5. **响应修改**：用户拖动滑条时，UI 调用 `set_tunable_value(key, value, section)` 把值写回识别器；300 ms debounce 后调用 `detect(frame)` 生成预览；
+6. **保存**：点击“保存”时，UI 调用 `save_tunable_to_app_config(app_config)`，再由 `ConfigBridge.save()` 把 `config.yaml` 落盘。
+
+> **关键约定**：新增识别器**必须**加入 `DETECTOR_REGISTRY` 才能在桌面端出现调参页面。未注册的识别器即使实现了完整契约，App 也不会自动发现。
+
+### 7. 参数的存放与读取
+
+GC2026 的参数来源有三层，且**默认值以识别器源码为唯一来源**：
+
+1. **默认值**：识别器源码中的类属性。
+   - 颜色检测：`TraditionalColorDetector.color_threshold["R"/"G"/"B"]` 和 `min_material_area` / `max_material_area`；
+   - 色环检测：`ColorRingDetector.erode_iter`、`gaussian_kernel_size` 等类属性。
+   - 修改这里会同时影响：首次运行默认值、`ConfigBridge` 推导的默认值、“恢复默认”按钮恢复的值。
+
+2. **运行时当前值**：识别器实例的属性或嵌套字典。
+   - 应用层和调参工具直接读写这些运行时值；
+   - `set_tunable_value()` 负责把 UI 传回的 `float` 按 `param_type` 截断为 `int`，并把 `scale` 还原为实际值。
+
+3. **配置文件 `config.yaml`**：持久化当前参数。
+   - `ConfigBridge` / `AppConfig` 负责把 YAML 映射到识别器可读取的结构；
+   - 颜色参数在 `color.R/G/B` 下，色环参数在 `color_ring` 下，全局参数（如 `min_material_area`）在顶层。
+
+示例 `config.yaml` 结构：
+
+```yaml
+color:
+  R:
+    centre: 0
+    error: 12
+    L_S: 41
+    U_S: 255
+    L_V: 29
+    U_V: 255
+  G: { ... }
+  B: { ... }
+
+color_ring:
+  erode_iter: 1
+  gaussian_kernel_size: 5
+  ...
+
+min_material_area: 5940
+max_material_area: 300000
+need2cut_height: 0
+target_angle: 46
+```
+
+> **注意**：`ParamDef.scale` 表示“UI 显示值 × scale = 实际值”。例如 `min_material_area` 的 `scale=10`，UI 滑条范围是 0–30000，但实际写入识别器的是 0–300000。
+
+### 8. 新增识别器的标准流程
+
+1. 在 `detector/` 新建文件，继承 `Detect`，实现算法与契约接口；
+2. 在识别器源码中声明 `TUNABLE_PARAMS` 并设置类属性默认值；
+3. （可选）在 `app/core/config_bridge.py` 的 `AppConfig` 中新增对应字段，让参数能被 `config.yaml` 持久化；
+4. 在 `applications.py` 新增调度方法，把识别器接入 `Applications`；
+5. 在 `main.py` 的 `TASK_TABLE` 中注册新的任务字；
+6. 若需要桌面调参页面，在 `app/ui/main_window.py` 的 `DETECTOR_REGISTRY` 中注册识别器。
+
+更多细节（完整模板、接入桌面应用、常见陷阱）请阅读 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+
+***
+
 ## 注意事项
 
 1. **平台差异**：

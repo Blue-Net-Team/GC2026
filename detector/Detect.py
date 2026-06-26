@@ -66,7 +66,10 @@ class Detect(ConfigLoader):
         setattr(self, key, value)
 
     def load_tunable_from_app_config(self, app_config: Any) -> None:
-        """从 AppConfig 加载所有可调参数。默认实现按 schema 的顶层 key 同步。"""
+        """从 AppConfig 加载所有可调参数。默认实现按 schema 的顶层 key 同步。
+
+        通过 set_tunable_value 写入，确保 int 参数被正确截断为整数。
+        """
         schema = self.tunable_schema()
         cfg = getattr(app_config, schema.name, {})
         for param in schema.params:
@@ -75,7 +78,7 @@ class Detect(ConfigLoader):
                 value = cfg.get(key, getattr(self, key))
             else:
                 value = getattr(cfg, key, getattr(self, key))
-            setattr(self, key, value)
+            self.set_tunable_value(key, value)
 
     def save_tunable_to_app_config(self, app_config: Any) -> None:
         """保存所有可调参数到 AppConfig。默认实现按 schema 的顶层 key 同步。"""

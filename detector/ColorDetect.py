@@ -239,9 +239,9 @@ class TraditionalColorDetector(Detect):
             cfg = app_config.color[color]
             for key in cfg.to_dict():
                 if key in self.color_threshold[color]:
-                    self.color_threshold[color][key] = getattr(cfg, key)
-        self.min_material_area = app_config.min_material_area
-        self.max_material_area = app_config.max_material_area
+                    self.set_tunable_value(key, getattr(cfg, key), section=color)
+        self.set_tunable_value("min_material_area", app_config.min_material_area)
+        self.set_tunable_value("max_material_area", app_config.max_material_area)
         self.update_threshold(self.color)
 
     def save_tunable_to_app_config(self, app_config):
@@ -446,5 +446,13 @@ class TraditionalColorDetector(Detect):
 
         super().load_param(config_dict, "min_material_area", default=self.min_material_area)
         super().load_param(config_dict, "max_material_area", default=self.max_material_area)
+
+        # 配置文件中可能保存为 float，把 int 参数转回整数
+        for color in self.color_groups or []:
+            for key, value in self.color_threshold.get(color, {}).items():
+                if isinstance(value, float):
+                    self.color_threshold[color][key] = int(round(value))
+        self.min_material_area = int(round(self.min_material_area))
+        self.max_material_area = int(round(self.max_material_area))
 
         self.update_threshold("R")

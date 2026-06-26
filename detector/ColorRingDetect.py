@@ -444,3 +444,8 @@ class ColorRingDetector(Detect):
         super().load_param(config_dict, "min_radius", default=getattr(type(self), "min_radius"))
         super().load_param(config_dict, "max_radius", default=getattr(type(self), "max_radius"))
         super().load_param(config_dict, "expected_circles", default=getattr(type(self), "expected_circles"))
+
+        # 配置文件中可能保存为 float，按 schema 把 int 参数转回整数
+        for param in self.tunable_schema().params:
+            if param.param_type == "int":
+                setattr(self, param.key, int(round(getattr(self, param.key))))

@@ -97,12 +97,31 @@ res, img = cap.read()
 
 这是独立的收发脚本，用于快速查看原始摄像头画面，不经过识别器处理。
 
+它之所以能在 Linux 和 Windows 上使用**完全相同**的命令 `uv run img_trans`，是因为脚本内部通过 `sys.platform` 自动判断当前系统并分发到不同实现：
+
+```python
+async def main():
+    if sys.platform == "linux":
+        await main_linux()      # 作为发送端
+    elif sys.platform == "win32":
+        await main_windows()    # 作为接收端
+```
+
+- **Linux 端**：`main_linux()` 打开本地摄像头，以服务端身份发送原始画面。
+- **Windows 端**：`main_windows()` 通过 `LoadWebCam` 接收画面，并用 OpenCV 窗口显示。
+
+因此方式 B 的两端角色是：
+
+| 操作系统 | 角色 | 实际执行函数 |
+|----------|------|--------------|
+| Linux / 嵌入式端（泰山派） | 发送端 | `main_linux()` |
+| Windows | 接收端 | `main_windows()` |
+
+参数说明：
+
 - 发送内容：摄像头原始画面。
 - 默认端口：`4444`
 - 默认网卡：`eth0`
-- 启动方式：
-  - Linux 端（发送）：`uv run img_trans`
-  - Windows 端（接收）：`uv run img_trans`（会打开一个 OpenCV 窗口显示画面）
 
 > `img_trans.py` 中 Windows 接收端的 IP 是**硬编码**的（`192.168.123.6`），使用前请根据实际嵌入式端 IP 修改。
 > 

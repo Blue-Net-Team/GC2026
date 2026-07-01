@@ -1,5 +1,7 @@
 import asyncio
 import cv2
+import hashlib
+from pathlib import Path
 from loguru import logger
 from ImgTrans import SendImgUDP
 from utils import Cap, Uart, is_desktop_environment
@@ -10,7 +12,9 @@ import time
 
 
 _log = logger.bind(module="App")
-applications = Applications(config_path="config.yaml")
+
+CONFIG_PATH = "config.yaml"
+applications = Applications(config_path=CONFIG_PATH)
 switch = Switch("GPIO3-A3", True)
 start_LED = LED("GPIO3-A2")
 detecting_LED = LED("GPIO3-A4")
@@ -150,6 +154,44 @@ async def board_show():
         await asyncio.sleep(0.05)
 
 
+def _compute_file_hash(path: str) -> str | None:
+    """计算文件内容的 SHA-256 hash，文件不存在时返回 None。"""
+    file_path = Path(path)
+    if not file_path.exists():
+        return None
+    try:
+        return hashlib.sha256(file_path.read_bytes()).hexdigest()
+    except Exception as e:
+        _log.error(f"计算文件 hash 失败: {e}")
+        return None
+
+
+async def config_watcher():
+    """配置文件热加载监视线程
+
+    通过周期性计算 config.yaml 的 SHA-256 hash，检测文件内容是否发生变化，
+    变化时调用 Applications.reload_config() 重新加载检测器参数。
+    """
+    _log.info(f"启动配置文件热加载监视: {CONFIG_PATH}")
+    last_hash = _compute_file_hash(CONFIG_PATH)
+
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            current_hash = _compute_file_hash(CONFIG_PATH)
+            if current_hash is None:
+                continue
+            if last_hash is None:
+                last_hash = current_hash
+                continue
+            if current_hash != last_hash:
+                _log.info("检测到配置文件变化，开始重新加载")
+                applications.reload_config()
+                last_hash = current_hash
+        except Exception as e:
+            _log.error(f"配置文件监视异常: {e}")
+
+
 async def img_trans():
     global img_need_to_send, server_ip
     # 绑定所有网卡，UDP 图传
@@ -195,7 +237,12 @@ async def img_trans():
         await asyncio.sleep(0.02)
 
 async def run():
-    await asyncio.gather(main(CAP, SERIAL_PORT), board_show(), img_trans())
+    await asyncio.gather(
+        main(CAP, SERIAL_PORT),
+        board_show(),
+        img_trans(),
+        config_watcher(),
+    )
 
 def cli():
     asyncio.run(run())

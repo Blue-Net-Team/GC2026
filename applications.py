@@ -22,7 +22,24 @@ class Applications:
         # 圆检测器配置
         self.colorRingDetector.load_config(config_path)
         _log.info(f"圆检测器配置: {self.colorRingDetector}")
-        
+
+        self._config_path = config_path
+
+    def reload_config(self) -> None:
+        """
+        重新加载配置文件
+        ----
+        供外部热更新调用，重新加载颜色检测器和色环检测器的配置。
+        """
+        _log.info(f"重新加载配置文件: {self._config_path}")
+        try:
+            self.colorDetector.load_config(self._config_path)
+            _log.info(f"颜色检测器配置已更新: {self.colorDetector}")
+            self.colorRingDetector.load_config(self._config_path)
+            _log.info(f"圆检测器配置已更新: {self.colorRingDetector}")
+        except Exception as e:
+            _log.error(f"重新加载配置文件失败: {e}")
+
     async def detect_material(self, img: cv2.typing.MatLike, color_label: str):
         """
         检测图片中的物料位置

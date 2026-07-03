@@ -1,5 +1,5 @@
+import asyncio
 import cv2
-import numpy as np
 
 from detector import TraditionalColorDetector, ColorRingDetector
 from loguru import logger
@@ -15,7 +15,7 @@ class Applications:
         _log.info(f"配置文件路径: {config_path}")
         self.colorDetector: TraditionalColorDetector = TraditionalColorDetector()
         self.colorRingDetector: ColorRingDetector = ColorRingDetector()
-        
+
         # 颜色检测器配置
         self.colorDetector.load_config(config_path)
         _log.info(f"颜色检测器配置: {self.colorDetector}")
@@ -24,19 +24,24 @@ class Applications:
         _log.info(f"圆检测器配置: {self.colorRingDetector}")
 
         self._config_path = config_path
+        # 保护配置热加载与检测之间的竞态：
+        # reload_config 与 detect_* 不能同时执行，避免检测中途参数被覆盖。
+        self._lock = asyncio.Lock()
 
-    def reload_config(self) -> None:
+    async def reload_config(self) -> None:
         """
         重新加载配置文件
         ----
         供外部热更新调用，重新加载颜色检测器和色环检测器的配置。
+        与 detect_* 方法互斥，避免检测中途参数被覆盖。
         """
         _log.info(f"重新加载配置文件: {self._config_path}")
         try:
-            self.colorDetector.load_config(self._config_path)
-            _log.info(f"颜色检测器配置已更新: {self.colorDetector}")
-            self.colorRingDetector.load_config(self._config_path)
-            _log.info(f"圆检测器配置已更新: {self.colorRingDetector}")
+            async with self._lock:
+                self.colorDetector.load_config(self._config_path)
+                _log.info(f"颜色检测器配置已更新: {self.colorDetector}")
+                self.colorRingDetector.load_config(self._config_path)
+                _log.info(f"圆检测器配置已更新: {self.colorRingDetector}")
         except Exception as e:
             _log.error(f"重新加载配置文件失败: {e}")
 
@@ -48,9 +53,10 @@ class Applications:
         :param color_label: 颜色标签,包含['R','G','B']
         :return: 物料位置的坐标（x, y）, 处理后的图像（绘制轮廓）
         """
-        self.colorDetector.update_range(color_label)
-        result, binary = await self.colorDetector.detect(img)
-        draw_img = self.colorDetector.visualize(img, result, binary)
+        async with self._lock:
+            self.colorDetector.update_range(color_label)
+            result, binary = await self.colorDetector.detect(img)
+            draw_img = self.colorDetector.visualize(img, result, binary)
 
         if result is None:
             _log.warning("未检测到物料位置")
@@ -66,8 +72,9 @@ class Applications:
         ----
         :return: 滤波后的圆心坐标 (x, y), 处理后的图像（原图+识别圆 与 二值化图拼接）
         """
-        result, binary = await self.colorRingDetector.detect(img)
-        draw_img = self.colorRingDetector.visualize(img, result, binary)
+        async with self._lock:
+            result, binary = await self.colorRingDetector.detect(img)
+            draw_img = self.colorRingDetector.visualize(img, result, binary)
 
         if not result:
             _log.warning("未检测到圆位置")

@@ -186,7 +186,7 @@ async def config_watcher():
                 continue
             if current_hash != last_hash:
                 _log.info("检测到配置文件变化，开始重新加载")
-                applications.reload_config()
+                await applications.reload_config()
                 last_hash = current_hash
         except Exception as e:
             _log.error(f"配置文件监视异常: {e}")

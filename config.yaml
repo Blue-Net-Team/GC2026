@@ -1,3 +1,14 @@
+system:
+  serial_port: "/dev/ttyS3"
+  udp_interface: ""
+  udp_port: 8080
+  switch_pin: "GPIO3-A3"
+  switch_reverse: true
+  start_led_pin: "GPIO3-A2"
+  detecting_led_pin: "GPIO3-A4"
+  oled_i2c_port: 2
+  oled_i2c_address: 0x3C
+  camera_index: null
 color:
   B:
     L_S: 41

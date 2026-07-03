@@ -1,25 +1,32 @@
 import asyncio
 import cv2
-import hashlib
-from pathlib import Path
-from loguru import logger
-from ImgTrans import SendImgUDP
-from utils import Cap, Uart, is_desktop_environment
-from applications import Applications
 import platform
-from utils import Switch, LED, OLED_I2C
 import time
+from pathlib import Path
+
+import yaml
+from loguru import logger
+
+from ImgTrans import SendImgUDP
+from app.core.config_bridge import SystemConfig
+from applications import Applications
+from utils import Cap, Uart, is_desktop_environment
+from utils import Switch, LED, OLED_I2C
+from utils.file_hash import compute_file_hash
+from utils.hardware_noop import NoOpLED, NoOpSwitch, NoOpOLED
 
 
 _log = logger.bind(module="App")
 
 CONFIG_PATH = "config.yaml"
-applications = Applications(config_path=CONFIG_PATH)
-switch = Switch("GPIO3-A3", True)
-start_LED = LED("GPIO3-A2")
-detecting_LED = LED("GPIO3-A4")
-oled = OLED_I2C(2,0x3c)
 
+# 全局硬件句柄，在 run() 中初始化
+applications: Applications | None = None
+switch: Switch | None = None
+start_LED: LED | None = None
+detecting_LED: LED | None = None
+oled: OLED_I2C | None = None
+CAP: cv2.VideoCapture | Cap | None = None
 
 # 待发送图像及锁
 img_need_to_send = None
@@ -39,28 +46,82 @@ server_ip = ""
 server_ip_lock = asyncio.Lock()
 
 
-SERVER_INTERFACE = ""  # 监听所有可用网卡
-SERVER_PORT = 8080
-SERIAL_PORT = "/dev/ttyS3"
-
-if platform.system() == "Linux":
-    CAP = Cap() # 初始化摄像头（Linux环境）
-else:
-    CAP = cv2.VideoCapture(0) # 初始化摄像头（Windows环境）
-
-# 定义任务表
-TASK_TABLE = {
-    "R": (applications.detect_material, "R"),
-    "G": (applications.detect_material, "G"),
-    "B": (applications.detect_material, "B"),
-    "C": (applications.detect_circle, None)
-}
+class InitializationError(Exception):
+    """初始化阶段出现无法继续运行的致命错误"""
+    pass
 
 
-async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
+def _load_system_config(path: str) -> SystemConfig:
+    """从 config.yaml 中读取 system 段，失败时抛出异常。"""
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ValueError("配置文件内容不是有效的字典")
+    return SystemConfig.from_dict(raw.get("system", {}))
+
+
+async def _initialize() -> SystemConfig:
+    """集中初始化所有硬件与核心对象，失败时抛出 InitializationError。"""
+    global applications, switch, start_LED, detecting_LED, oled, CAP
+
+    # 1. 配置文件
+    config_file = Path(CONFIG_PATH)
+    if not config_file.exists():
+        _log.error(f"缺少配置文件: {CONFIG_PATH}，请先创建该文件")
+        raise InitializationError("缺少配置文件")
+
+    try:
+        system = _load_system_config(CONFIG_PATH)
+    except Exception as e:
+        _log.error(f"config.yaml 加载失败，请检查文件格式与字段: {e}")
+        raise InitializationError("配置加载失败") from e
+
+    try:
+        applications = Applications(config_path=CONFIG_PATH)
+    except Exception as e:
+        _log.error(f"检测器初始化失败，请检查 config.yaml 中颜色/色环参数: {e}")
+        raise InitializationError("检测器初始化失败") from e
+
+    # 2. 摄像头
+    try:
+        if platform.system() == "Linux":
+            if system.camera_index is not None:
+                CAP = Cap(_id=system.camera_index)
+            else:
+                CAP = Cap()
+        else:
+            idx = system.camera_index if system.camera_index is not None else 0
+            CAP = cv2.VideoCapture(idx)
+        if not CAP.isOpened():
+            raise RuntimeError("摄像头未能成功打开")
+    except Exception as e:
+        _log.error(f"摄像头打开失败，请检查设备连接与权限: {e}")
+        raise InitializationError("摄像头初始化失败") from e
+
+    # 3. GPIO / LED / 开关（非关键硬件，失败时使用 no-op 占位）
+    try:
+        switch = Switch(system.switch_pin, system.switch_reverse)
+        start_LED = LED(system.start_led_pin)
+        detecting_LED = LED(system.detecting_led_pin)
+    except Exception as e:
+        _log.warning(f"GPIO 初始化失败，程序将继续运行但 LED/开关不可用: {e}")
+        switch = NoOpSwitch()
+        start_LED = NoOpLED()
+        detecting_LED = NoOpLED()
+
+    # 4. OLED（非关键硬件，失败时使用 no-op 占位）
+    try:
+        oled = OLED_I2C(system.oled_i2c_port, system.oled_i2c_address)
+    except Exception as e:
+        _log.warning(f"OLED 初始化失败，程序将继续运行但 OLED 不可用: {e}")
+        oled = NoOpOLED()
+
+    _log.info("系统初始化完成")
+    return system
+
+
+async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
     global img_need_to_send, content_need_to_show
-
-    ser = Uart(ser_port)
 
     while True:
         # 获取当前运行模式
@@ -94,14 +155,14 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
             # 处理图像
             else:
                 await detecting_LED.on()
-                # TASK_TABLE[task_sign][0]为函数指针
-                # TASK_TABLE[task_sign][1]为附加参数
+                # task_table[task_sign][0]为函数指针
+                # task_table[task_sign][1]为附加参数
                 start_time = time.perf_counter()
-                res, res_img = await TASK_TABLE[task_sign][0](img, TASK_TABLE[task_sign][1])
+                res, res_img = await task_table[task_sign][0](img, task_table[task_sign][1])
                 res_str = applications.tuple2str(res)
                 async with content_lock:        # 保护内容更新
                     content_need_to_show = str(res) if res else 'None'
-                    
+
                 await ser.new_write(res_str, head="@", tail="#")
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 _log.info(f"发送结果: {res_str} (耗时: {elapsed_ms:.2f} ms)")
@@ -166,18 +227,6 @@ async def board_show():
         await asyncio.sleep(0.05)
 
 
-def _compute_file_hash(path: str) -> str | None:
-    """计算文件内容的 SHA-256 hash，文件不存在时返回 None。"""
-    file_path = Path(path)
-    if not file_path.exists():
-        return None
-    try:
-        return hashlib.sha256(file_path.read_bytes()).hexdigest()
-    except Exception as e:
-        _log.error(f"计算文件 hash 失败: {e}")
-        return None
-
-
 async def config_watcher():
     """配置文件热加载监视线程
 
@@ -185,12 +234,12 @@ async def config_watcher():
     变化时调用 Applications.reload_config() 重新加载检测器参数。
     """
     _log.info(f"启动配置文件热加载监视: {CONFIG_PATH}")
-    last_hash = _compute_file_hash(CONFIG_PATH)
+    last_hash = compute_file_hash(CONFIG_PATH)
 
     while True:
         await asyncio.sleep(1.0)
         try:
-            current_hash = _compute_file_hash(CONFIG_PATH)
+            current_hash = compute_file_hash(CONFIG_PATH)
             if current_hash is None:
                 continue
             if last_hash is None:
@@ -204,10 +253,10 @@ async def config_watcher():
             _log.error(f"配置文件监视异常: {e}")
 
 
-async def img_trans():
+async def img_trans(port: int, interface: str):
     global img_need_to_send, server_ip
     # 绑定所有网卡，UDP 图传
-    sendImgUDP = await SendImgUDP.create(interface=SERVER_INTERFACE, port=SERVER_PORT)
+    sendImgUDP = await SendImgUDP.create(interface=interface, port=port)
     _log.info("UDP 服务已启动 (监听所有网卡)")
 
     # 从可用网卡获取一个 IP 地址用于 OLED 显示
@@ -248,16 +297,49 @@ async def img_trans():
         # 控制发送频率，避免连续高频发送抢占事件循环
         await asyncio.sleep(0.02)
 
-async def run():
+
+async def run() -> bool:
+    try:
+        system = await _initialize()
+    except InitializationError:
+        _log.error("系统初始化失败，程序退出")
+        return False
+
+    task_table = {
+        "R": (applications.detect_material, "R"),
+        "G": (applications.detect_material, "G"),
+        "B": (applications.detect_material, "B"),
+        "C": (applications.detect_circle, None),
+    }
+
+    try:
+        ser = Uart(system.serial_port)
+    except Exception as e:
+        _log.error(f"串口 {system.serial_port} 打开失败，请检查权限与连接: {e}")
+        return False
+
     await asyncio.gather(
-        main(CAP, SERIAL_PORT),
+        main(CAP, ser, task_table),
         board_show(),
-        img_trans(),
+        img_trans(system.udp_port, system.udp_interface),
         config_watcher(),
     )
+    return True
+
 
 def cli():
-    asyncio.run(run())
+    try:
+        success = asyncio.run(run())
+    except KeyboardInterrupt:
+        _log.info("用户中断")
+        success = False
+    except Exception as e:
+        _log.error(f"运行时异常: {e}")
+        success = False
+
+    if not success:
+        raise SystemExit(1)
+
 
 if __name__ == "__main__":
     cli()

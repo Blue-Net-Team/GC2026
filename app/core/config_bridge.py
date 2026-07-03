@@ -52,6 +52,54 @@ DEFAULT_COLOR_PARAMS: dict[str, dict[str, int]] = _default_color_params()
 DEFAULT_COLOR_RING_PARAMS: dict[str, Any] = _default_color_ring_params()
 
 
+@dataclass
+class SystemConfig:
+    """运行时硬件与系统参数（与 GC2026 config.yaml 的 system 段兼容）"""
+
+    serial_port: str = "/dev/ttyS3"
+    udp_interface: str = ""
+    udp_port: int = 8080
+    switch_pin: str = "GPIO3-A3"
+    switch_reverse: bool = True
+    start_led_pin: str = "GPIO3-A2"
+    detecting_led_pin: str = "GPIO3-A4"
+    oled_i2c_port: int = 2
+    oled_i2c_address: int = 0x3C
+    camera_index: int | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SystemConfig":
+        camera_index = data.get("camera_index")
+        if camera_index is not None:
+            camera_index = int(camera_index)
+        return cls(
+            serial_port=str(data.get("serial_port", "/dev/ttyS3")),
+            udp_interface=str(data.get("udp_interface", "")),
+            udp_port=int(data.get("udp_port", 8080)),
+            switch_pin=str(data.get("switch_pin", "GPIO3-A3")),
+            switch_reverse=bool(data.get("switch_reverse", True)),
+            start_led_pin=str(data.get("start_led_pin", "GPIO3-A2")),
+            detecting_led_pin=str(data.get("detecting_led_pin", "GPIO3-A4")),
+            oled_i2c_port=int(data.get("oled_i2c_port", 2)),
+            oled_i2c_address=int(data.get("oled_i2c_address", 0x3C)),
+            camera_index=camera_index,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "serial_port": self.serial_port,
+            "udp_interface": self.udp_interface,
+            "udp_port": self.udp_port,
+            "switch_pin": self.switch_pin,
+            "switch_reverse": self.switch_reverse,
+            "start_led_pin": self.start_led_pin,
+            "detecting_led_pin": self.detecting_led_pin,
+            "oled_i2c_port": self.oled_i2c_port,
+            "oled_i2c_address": self.oled_i2c_address,
+            "camera_index": self.camera_index,
+        }
+
+
 def _color_config_defaults() -> dict[str, int]:
     """ColorConfig 的字段默认值取自 R 颜色。"""
     return copy.deepcopy(DEFAULT_COLOR_PARAMS["R"])
@@ -106,6 +154,7 @@ class AppConfig:
     max_material_area: int = field(default_factory=lambda: int(TraditionalColorDetector.max_material_area))
     need2cut_height: int = 0
     target_angle: int = 46
+    system: SystemConfig = field(default_factory=SystemConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
@@ -121,10 +170,12 @@ class AppConfig:
             max_material_area=int(data.get("max_material_area", TraditionalColorDetector.max_material_area)),
             need2cut_height=int(data.get("need2cut_height", 0)),
             target_angle=int(data.get("target_angle", 46)),
+            system=SystemConfig.from_dict(data.get("system", {})),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "system": self.system.to_dict(),
             "color": {name: cfg.to_dict() for name, cfg in self.color.items()},
             "color_ring": self.color_ring,
             "min_material_area": self.min_material_area,

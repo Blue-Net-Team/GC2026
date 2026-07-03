@@ -244,7 +244,7 @@ class ColorRingDetector(Detect):
             clipLimit=self.clahe_clip_limit,
             tileGridSize=(self.clahe_tile_size, self.clahe_tile_size)
         )
-        clahe.apply(gray)
+        gray = clahe.apply(gray)
 
         gradient = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, self.morph_kernel)
 

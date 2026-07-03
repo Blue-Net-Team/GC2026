@@ -22,10 +22,10 @@ CONFIG_PATH = "config.yaml"
 
 # 全局硬件句柄，在 run() 中初始化
 applications: Applications | None = None
-switch: Switch | None = None
-start_LED: LED | None = None
-detecting_LED: LED | None = None
-oled: OLED_I2C | None = None
+switch: Switch | NoOpSwitch | None = None
+start_LED: LED | NoOpLED | None = None
+detecting_LED: LED | NoOpLED | None = None
+oled: OLED_I2C | NoOpOLED | None = None
 CAP: cv2.VideoCapture | Cap | None = None
 
 # 待发送图像及锁
@@ -123,6 +123,9 @@ async def _initialize() -> SystemConfig:
 async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
     global img_need_to_send, content_need_to_show
 
+    assert applications is not None, "applications 未初始化"
+    assert detecting_LED is not None, "detecting_LED 未初始化"
+
     while True:
         # 获取当前运行模式
         async with mode_lock:
@@ -196,6 +199,11 @@ async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
 
 async def board_show():
     global RUN_MODE, content_need_to_show
+
+    assert switch is not None, "switch 未初始化"
+    assert start_LED is not None, "start_LED 未初始化"
+    assert oled is not None, "oled 未初始化"
+
     prev_mode = None
     while True:
         show_content = ""
@@ -233,6 +241,8 @@ async def config_watcher():
     通过周期性计算 config.yaml 的 SHA-256 hash，检测文件内容是否发生变化，
     变化时调用 Applications.reload_config() 重新加载检测器参数。
     """
+    assert applications is not None, "applications 未初始化"
+
     _log.info(f"启动配置文件热加载监视: {CONFIG_PATH}")
     last_hash = compute_file_hash(CONFIG_PATH)
 
@@ -304,6 +314,9 @@ async def run() -> bool:
     except InitializationError:
         _log.error("系统初始化失败，程序退出")
         return False
+
+    assert applications is not None, "applications 未初始化"
+    assert CAP is not None, "CAP 未初始化"
 
     task_table = {
         "R": (applications.detect_material, "R"),

@@ -157,6 +157,29 @@ class ColorRingDetector(Detect):
     def morph_kernel(self):
         return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.morph_kernel_size, self.morph_kernel_size))
 
+    def __init__(self) -> None:
+        """
+        初始化色环检测器，并创建圆心滑动中值滤波的历史缓冲区。
+        """
+        super().__init__()
+        self._center_history: list[tuple[int, int]] = []
+        self._filter_window = 5
+        self._last_raw_center: tuple[int, int] | None = None
+        self._last_filtered_center: tuple[int, int] | None = None
+
+    def _filter_center(self, center: tuple[int, int]) -> tuple[int, int]:
+        """
+        滑动窗口中值滤波，抑制霍夫圆检测的帧间抖动。
+        """
+        self._center_history.append(center)
+        if len(self._center_history) > self._filter_window:
+            self._center_history.pop(0)
+
+        xs = sorted(p[0] for p in self._center_history)
+        ys = sorted(p[1] for p in self._center_history)
+        mid = len(xs) // 2
+        return xs[mid], ys[mid]
+
     def __callback(self, x):
         try:
             self.erode_iter = cv2.getTrackbarPos("erode_iter", "Trackbar")
@@ -308,7 +331,7 @@ class ColorRingDetector(Detect):
         检测色环
         ----
         组合 binarization() 与 get_circles()，返回完整圆列表和预处理图像。
-        不在原图上绘制任何标记，由调用方决定如何可视化。
+        对半径最大的圆心做滑动中值滤波，返回的 circles[0] 为滤波后的结果。
 
         :param _img: 需要检测的图片
         :return: (圆列表 [(x, y, r), ...], 预处理后的单通道图像)
@@ -316,6 +339,14 @@ class ColorRingDetector(Detect):
         """
         binary = await self.binarization(_img)
         circles = await self.get_circles(binary)
+
+        if circles:
+            raw_center = circles[0][:2]
+            filtered_center = self._filter_center(raw_center)
+            self._last_raw_center = raw_center
+            self._last_filtered_center = filtered_center
+            circles[0] = (*filtered_center, circles[0][2])
+
         return circles, binary
 
     def draw_overlay(
@@ -327,6 +358,9 @@ class ColorRingDetector(Detect):
         """
         在原图上绘制检测到的色环和圆心。
 
+        红色圆圈为检测到的圆环；蓝色小点为原始圆心；绿色十字为滤波后的圆心
+        （即 detect() 返回的 circles[0] 圆心，也是实际用于控制算法的值）。
+
         :param frame: 原始图像
         :param result: detect() 返回的圆列表 [(x, y, r), ...]
         :param binary: 预处理后的单通道图像（本方法中未使用，仅保持接口一致）
@@ -336,8 +370,29 @@ class ColorRingDetector(Detect):
         if result is not None:
             for x, y, r in result:
                 cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
-                cv2.circle(output, (int(x), int(y)), 2, (255, 0, 0), 2)
+
+            # 蓝色小点：原始圆心
+            if self._last_raw_center is not None:
+                cv2.circle(output, self._last_raw_center, 3, (255, 0, 0), -1)
+
+            # 绿色十字：滤波后的圆心（实际使用值）
+            if self._last_filtered_center is not None:
+                self._draw_crosshair(output, self._last_filtered_center, (0, 255, 0), size=10, thickness=2)
+
         return output
+
+    @staticmethod
+    def _draw_crosshair(
+        img: cv2.typing.MatLike,
+        center: tuple[int, int],
+        color: tuple[int, int, int],
+        size: int = 8,
+        thickness: int = 2,
+    ) -> None:
+        """在图像上绘制十字准星，不遮挡中心像素。"""
+        cx, cy = center
+        cv2.line(img, (cx - size, cy), (cx + size, cy), color, thickness)
+        cv2.line(img, (cx, cy - size), (cx, cy + size), color, thickness)
 
     def format_detection_info(self, result: list[tuple[int, int, int]] | None) -> str:
         """格式化检测信息文本。"""
@@ -359,18 +414,15 @@ class ColorRingDetector(Detect):
         """
         可视化色环检测结果
         ----
-        在原图上绘制检测圆，并与二值化图纵向拼接。供独立调参窗口使用。
+        调用 draw_overlay() 在原图上绘制检测圆、原始圆心和滤波圆心，
+        并与二值化图纵向拼接。供独立调参窗口使用。
 
         :param _img: 原始图像
         :param circles: 检测到的圆列表 [(x, y, r), ...]，为 None 时不画圆
         :param binary: 预处理后的单通道图像，为 None 时使用全黑占位图
         :return: 拼接后的可视化图像
         """
-        output = _img.copy()
-        if circles is not None:
-            for x, y, r in circles:
-                cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
-                cv2.circle(output, (int(x), int(y)), 2, (255, 0, 0), 2)
+        output = self.draw_overlay(_img, circles, binary)
 
         if binary is None:
             binary = np.zeros((_img.shape[0], _img.shape[1]), dtype=np.uint8)
@@ -449,3 +501,8 @@ class ColorRingDetector(Detect):
         for param in self.tunable_schema().params:
             if param.param_type == "int":
                 setattr(self, param.key, int(round(getattr(self, param.key))))
+
+        # 参数发生变化后，清空历史滤波缓冲区，避免旧位置影响新配置
+        self._center_history.clear()
+        self._last_raw_center = None
+        self._last_filtered_center = None

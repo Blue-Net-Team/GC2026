@@ -64,18 +64,18 @@ class Applications:
         """
         检测图片中的圆位置
         ----
-        :return: 圆心坐标 (x, y), 处理后的图像（原图+识别圆 与 二值化图拼接）
+        :return: 滤波后的圆心坐标 (x, y), 处理后的图像（原图+识别圆 与 二值化图拼接）
         """
         result, binary = await self.colorRingDetector.detect(img)
         draw_img = self.colorRingDetector.visualize(img, result, binary)
 
-        if result:
-            x, y, _r = result[0]
-            _log.info(f"检测到圆位置: ({x}, {y})")
-            return (x, y), draw_img
-        else:
+        if not result:
             _log.warning("未检测到圆位置")
             return None, draw_img
+
+        x, y, _r = result[0]
+        _log.info(f"检测到圆位置: ({x}, {y})")
+        return (x, y), draw_img
     def tuple2str(self, _tuple: tuple|None) -> str:
         """
         元组转换为特定格式的字符串

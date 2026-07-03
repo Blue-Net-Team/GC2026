@@ -4,7 +4,7 @@ import cv2
 from ImgTrans import ReceiveImgUDP
 import click
 
-from detector import ColorRingDetector, TraditionalColorDetector
+from applications import Applications
 from loguru import logger
 
 _log = logger.bind(module="setup")
@@ -16,21 +16,43 @@ class MockCap(cv2.VideoCapture):
     def read(self) -> tuple[bool, cv2.typing.MatLike|None]:
         return True, self.frame if self.frame is not None else None
     
-mockCap = MockCap("test.jpg")
+class MockVideo(cv2.VideoCapture):
+    def __init__(self, video_path: str) -> None:
+        self.video_path = video_path
+        self.video = cv2.VideoCapture(video_path)
+        if not self.video.isOpened():
+            raise Exception(f"无法打开视频文件: {video_path}")
+        
+    def _reload_video(self):
+        self.video.release()
+        self.video = cv2.VideoCapture(self.video_path)
+        if not self.video.isOpened():
+            raise Exception(f"无法打开视频文件: {self.video_path}")
+    
+    def read(self) -> tuple[bool, cv2.typing.MatLike|None]:
+        # 循环读取
+        ret, frame = self.video.read()
+        if ret:
+            return True, frame
+        else:
+            self._reload_video()
+            return self.read()
+    
+# mockCap = MockCap("test.jpg")
+mockCap = MockVideo(r"mock_data\test.avi")
 
 class Setup:
     def __init__(self, cap: cv2.VideoCapture) -> None:
         self.cap: cv2.VideoCapture = cap
-
-        # 识别器初始化
-        self.colorDetector = TraditionalColorDetector()
-        self.colorRingDetector = ColorRingDetector()
         self.CONFIG_PATH = "config.yaml"
 
-        # 加载已有配置
+        # 通过 Applications 统一初始化检测器，确保 setup 与 main 的渲染/滤波逻辑一致
+        self.applications = Applications(self.CONFIG_PATH)
+        self.colorDetector = self.applications.colorDetector
+        self.colorRingDetector = self.applications.colorRingDetector
+
+        # 加载已有配置（Applications 构造函数已加载，此处保留兼容逻辑）
         if os.path.exists(self.CONFIG_PATH):
-            self.colorDetector.load_config(self.CONFIG_PATH)
-            self.colorRingDetector.load_config(self.CONFIG_PATH)
             _log.info(f"已从 {self.CONFIG_PATH} 加载配置")
 
     async def setupColor(self):
@@ -39,22 +61,18 @@ class Setup:
         """
         self.colorDetector.createTrackbar()
         _log.info("已创建颜色设置窗口")
+        cv2.namedWindow("Color", cv2.WINDOW_NORMAL)
         while True:
             ret, frame = self.cap.read()
             if frame is None:
                 break
-            
-            binarized_frame = await self.colorDetector.binarization(frame)
-            color_pos = await self.colorDetector.get_color_position(binarized_frame)
-            
-            if color_pos is not None:
-                # 绘制外接矩形
-                cx, cy, w, h = color_pos
-                cv2.rectangle(frame, (cx - w // 2, cy - h // 2), (cx + w // 2, cy + h // 2), (0, 255, 0), 2)
-            
-            cv2.imshow("frame", frame)
-            cv2.imshow("mask", binarized_frame)
-            
+
+            # 使用当前 trackbar 选中的颜色标签，与 Applications/main 保持一致
+            color_label = self.colorDetector.color
+            res, res_img = await self.applications.detect_material(frame, color_label)
+
+            cv2.imshow("Color", res_img)
+
             waitkey = cv2.waitKey(1)
             if waitkey & 0xFF == ord("q"):
                 _log.info("已退出颜色设置")
@@ -62,7 +80,7 @@ class Setup:
             elif waitkey & 0xFF == ord("s"):
                 self.colorDetector.save_config(self.CONFIG_PATH)
                 _log.info(f"已保存颜色配置到 {self.CONFIG_PATH}")
-                
+
         cv2.destroyAllWindows()
 
     async def setupColorRing(self):
@@ -77,8 +95,7 @@ class Setup:
             if frame is None:
                 break
 
-            circles, binary = await self.colorRingDetector.detect(frame)
-            res_img = self.colorRingDetector.visualize(frame, circles, binary)
+            filtered_center, res_img = await self.applications.detect_circle(frame)
 
             cv2.imshow("ColorRing", res_img)
 

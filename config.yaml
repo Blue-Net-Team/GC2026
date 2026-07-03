@@ -1,28 +1,28 @@
 color:
-  R:
-    centre: 0
-    error: 12
-    L_S: 41
-    U_S: 255
-    L_V: 29
-    U_V: 255
-  G:
-    centre: 69
-    error: 12
-    L_S: 41
-    U_S: 255
-    L_V: 29
-    U_V: 255
   B:
+    L_S: 41
+    L_V: 29
+    U_S: 255
+    U_V: 255
     centre: 108
     error: 12
+  G:
     L_S: 41
-    U_S: 255
     L_V: 29
+    U_S: 255
     U_V: 255
+    centre: 69
+    error: 12
+  R:
+    L_S: 41
+    L_V: 29
+    U_S: 255
+    U_V: 255
+    centre: 0
+    error: 12
 color_ring:
   alpha: 4.4
-  clahe_clip_limit: 1.2
+  clahe_clip_limit: 0.8
   clahe_tile_size: 8
   dilate_kernel_size: 5
   erode_iter: 1
@@ -36,8 +36,8 @@ color_ring:
   max_radius: 281
   min_radius: 54
   morph_kernel_size: 3
-  threshold_value: 34
-min_material_area: 5940
+  threshold_value: 69
 max_material_area: 300000
+min_material_area: 5940
 need2cut_height: 0
 target_angle: 46

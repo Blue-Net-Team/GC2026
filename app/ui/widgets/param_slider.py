@@ -124,11 +124,12 @@ class ParamSlider(QWidget):
     # 事件处理
     # ------------------------------------------------------------------
     def _on_slider_moved(self, slider_value: int) -> None:
-        """拖动过程中实时更新数值框，但不触发保存/预览。"""
+        """拖动过程中实时更新数值框并触发预览（由上层防抖）。"""
         real_value = self._to_real(slider_value)
         self._spin.blockSignals(True)
         self._set_spin(real_value)
         self._spin.blockSignals(False)
+        self.value_changed.emit(float(real_value))
 
     def _on_slider_changed(self, slider_value: int) -> None:
         """释放滑条时同步数值框并触发保存/预览。"""

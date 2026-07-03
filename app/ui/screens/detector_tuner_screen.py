@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
@@ -33,12 +33,12 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import AppConfig, ConfigBridge
+from app.core.config_bridge import ConfigBridge
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 from app.ui.widgets.parameter_group_panel import ParameterGroupPanel
 from detector.Detect import Detect
-from detector.schema import DetectorSchema, ParamDef
+from detector.schema import ParamDef
 
 _log = logger.bind(module="DetectorTunerScreen")
 
@@ -128,10 +128,9 @@ class DetectorTunerScreen(QWidget):
         self._latest_frame: Optional[np.ndarray] = None
         self._executor = ThreadPoolExecutor(max_workers=2)
 
-        # 300ms debounce 更新预览
-        self._preview_timer = QTimer(self)
-        self._preview_timer.setSingleShot(True)
-        self._preview_timer.timeout.connect(self._update_preview)
+        # 预览调度标志：避免预览任务重叠，同时保证最新参数被渲染
+        self._preview_pending = False
+        self._preview_queued = False
 
         self._build_ui()
 
@@ -353,8 +352,7 @@ class DetectorTunerScreen(QWidget):
 
     def _on_slider_changed(self, _key: str, section: Optional[str]) -> None:
         self._store_current_tab_values()
-        self._preview_timer.stop()
-        self._preview_timer.start(300)
+        self._request_preview()
 
     def _on_save(self) -> None:
         self._store_current_tab_values()
@@ -376,12 +374,20 @@ class DetectorTunerScreen(QWidget):
     # ------------------------------------------------------------------
     def _on_frame_received(self, frame: np.ndarray) -> None:
         self._latest_frame = frame
-        if not self._preview_timer.isActive():
-            self._update_preview()
+        self._request_preview()
+
+    def _request_preview(self) -> None:
+        """请求刷新预览。如果当前有任务在跑，则标记排队，等当前完成后再跑一轮。"""
+        if self._preview_pending:
+            self._preview_queued = True
+            return
+        self._preview_pending = True
+        self._update_preview()
 
     def _update_preview(self) -> None:
         frame = self._latest_frame
         if frame is None:
+            self._preview_pending = False
             return
 
         detector = self._detector
@@ -394,12 +400,17 @@ class DetectorTunerScreen(QWidget):
         future = self._executor.submit(_process)
 
         def _on_done(_future) -> None:
+            self._preview_pending = False
             try:
                 overlay, binary, result = _future.result()
                 self._preview_ready.emit(overlay, binary)
                 self._info_ready.emit(result)
             except Exception as e:
                 _log.error(f"预览计算失败: {e}")
+            # 拖动过程中积累了新请求，立即再跑一轮
+            if self._preview_queued:
+                self._preview_queued = False
+                self._request_preview()
 
         future.add_done_callback(_on_done)
 

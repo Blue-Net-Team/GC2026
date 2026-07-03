@@ -67,10 +67,22 @@ async def main(cap: cv2.VideoCapture, ser_port: str = "/dev/ttyUSB0"):
         async with mode_lock:
             run_mode = RUN_MODE
         if run_mode == "main":
+            # 串口断开后自动重连
+            if not ser.is_open:
+                _log.warning("串口未打开，尝试重连...")
+                if not await ser.reconnect():
+                    await asyncio.sleep(1.0)
+                    continue
+                _log.info("串口已重连")
+
             # 读取串口任务
             task_sign = await ser.new_read(head="@", tail="#")
             if task_sign is None:
-                _log.warning("未收到任务")
+                if not ser.is_open:
+                    # 读取过程中串口断开，直接进入下一轮重连
+                    continue
+                # 超时未收到任务，避免空转，短暂让出事件循环
+                await asyncio.sleep(0.05)
                 continue
             _log.info(f"收到任务: {task_sign}")
 

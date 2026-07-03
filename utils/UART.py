@@ -54,6 +54,9 @@ from typing import Union, overload
 from utils.typingCheck import check_args
 import serial
 import asyncio
+from loguru import logger
+
+_log = logger.bind(module="Uart")
 
 
 class Uart(serial.Serial):
@@ -75,6 +78,7 @@ class Uart(serial.Serial):
         """
         super().__init__(port=port, baudrate=baudrate, timeout=timeout)
         self.read_flag = True
+        self._reconnect_lock = asyncio.Lock()
 
     def cancel_read(self):
         """取消正在进行的读取操作，打断阻塞的 select"""
@@ -97,6 +101,7 @@ class Uart(serial.Serial):
             try:
                 byte = super().read(1)
             except serial.SerialException:
+                self.close()
                 return None
             if not byte:
                 return None
@@ -110,6 +115,7 @@ class Uart(serial.Serial):
             try:
                 byte = super().read(1)
             except serial.SerialException:
+                self.close()
                 return None
             if not byte:
                 continue
@@ -130,6 +136,27 @@ class Uart(serial.Serial):
         """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_read, head, tail)
+
+    async def reconnect(self) -> bool:
+        """
+        尝试重新打开串口。
+
+        Returns:
+            bool: 是否重连成功
+        """
+        async with self._reconnect_lock:
+            def _do() -> bool:
+                try:
+                    if self.is_open:
+                        self.close()
+                    self.open()
+                    return True
+                except Exception as e:
+                    _log.error(f"串口重连失败: {e}")
+                    return False
+
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _do)
 
     @overload
     async def new_write(self, data: str, head: str = "", tail: str = "") -> None: ...

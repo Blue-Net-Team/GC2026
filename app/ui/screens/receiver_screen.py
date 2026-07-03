@@ -18,18 +18,20 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 from loguru import logger
 
-from app.core.device_store import DeviceStore, RemoteDevice
+from app.core.device_store import DeviceStore
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 
@@ -85,6 +87,8 @@ class ReceiverScreen(QWidget):
     MODE_LOCAL = "local"
     MODE_SAVED = "saved"
     MODE_MANUAL = "manual"
+    MODE_MOCK_IMAGE = "mock_image"
+    MODE_MOCK_VIDEO = "mock_video"
 
     def __init__(
         self,
@@ -147,6 +151,33 @@ class ReceiverScreen(QWidget):
         top_bar.addWidget(self._manual_frame)
         self._manual_frame.hide()
 
+        # 本地摄像头 ID 输入
+        self._camera_id_spin = QSpinBox()
+        self._camera_id_spin.setRange(0, 15)
+        self._camera_id_spin.setValue(0)
+        self._camera_id_spin.setFixedWidth(70)
+        self._camera_id_spin.setVisible(False)
+        top_bar.addWidget(self._camera_id_spin)
+
+        # Mock 文件路径输入
+        self._mock_frame = QFrame()
+        mock_layout = QHBoxLayout(self._mock_frame)
+        mock_layout.setContentsMargins(0, 0, 0, 0)
+        mock_layout.setSpacing(8)
+
+        self._mock_path_edit = QLineEdit()
+        self._mock_path_edit.setPlaceholderText("Mock 文件路径")
+        self._mock_path_edit.setFixedWidth(220)
+        mock_layout.addWidget(self._mock_path_edit)
+
+        self._mock_browse_btn = QPushButton("浏览")
+        self._mock_browse_btn.setFixedWidth(60)
+        self._mock_browse_btn.clicked.connect(self._on_browse_mock)
+        mock_layout.addWidget(self._mock_browse_btn)
+
+        top_bar.addWidget(self._mock_frame)
+        self._mock_frame.hide()
+
         self._connect_btn = QPushButton("连接")
         self._connect_btn.setFixedWidth(80)
         self._connect_btn.clicked.connect(self._on_connect)
@@ -206,10 +237,13 @@ class ReceiverScreen(QWidget):
         # 初始化下拉框
         self._refresh_mode_combo()
         self._refresh_device_combo()
+        self._on_mode_changed(0)
 
     def _refresh_mode_combo(self) -> None:
         self._mode_combo.clear()
         self._mode_combo.addItem("本机摄像头", self.MODE_LOCAL)
+        self._mode_combo.addItem("Mock图片", self.MODE_MOCK_IMAGE)
+        self._mode_combo.addItem("Mock视频", self.MODE_MOCK_VIDEO)
         self._mode_combo.addItem("已有设备", self.MODE_SAVED)
         self._mode_combo.addItem("手动输入图传摄像头", self.MODE_MANUAL)
 
@@ -222,12 +256,40 @@ class ReceiverScreen(QWidget):
         mode = self._mode_combo.currentData()
         self._device_combo.setVisible(mode == self.MODE_SAVED)
         self._manual_frame.setVisible(mode == self.MODE_MANUAL)
+        self._camera_id_spin.setVisible(mode == self.MODE_LOCAL)
+        self._mock_frame.setVisible(mode in (self.MODE_MOCK_IMAGE, self.MODE_MOCK_VIDEO))
+
+        if mode == self.MODE_MOCK_IMAGE:
+            self._mock_path_edit.setPlaceholderText("选择一张图片")
+        elif mode == self.MODE_MOCK_VIDEO:
+            self._mock_path_edit.setPlaceholderText("选择一个视频")
+            if not self._mock_path_edit.text().strip():
+                self._mock_path_edit.setText("mock_data/test.avi")
+        else:
+            self._mock_path_edit.setPlaceholderText("Mock 文件路径")
 
     def _on_connect(self) -> None:
         mode = self._mode_combo.currentData()
 
         if mode == self.MODE_LOCAL:
-            self._manager.connect_local_camera(0)
+            camera_id = self._camera_id_spin.value()
+            self._manager.connect_local_camera(camera_id)
+        elif mode == self.MODE_MOCK_IMAGE:
+            path = self._mock_path_edit.text().strip()
+            if not path:
+                QMessageBox.warning(self, "输入错误", "请选择 Mock 图片路径")
+                return
+            if not self._validate_mock_image(path):
+                return
+            self._manager.connect_mock_image(path)
+        elif mode == self.MODE_MOCK_VIDEO:
+            path = self._mock_path_edit.text().strip()
+            if not path:
+                QMessageBox.warning(self, "输入错误", "请选择 Mock 视频路径")
+                return
+            if not self._validate_mock_video(path):
+                return
+            self._manager.connect_mock_video(path)
         elif mode == self.MODE_SAVED:
             device = self._device_combo.currentData()
             if device is None:
@@ -246,6 +308,42 @@ class ReceiverScreen(QWidget):
                 QMessageBox.warning(self, "输入错误", "端口号必须为数字")
                 return
             self._manager.connect_udp(ip, port)
+
+    def _validate_mock_image(self, path: str) -> bool:
+        frame = cv2.imread(path)
+        if frame is None:
+            QMessageBox.warning(self, "文件错误", f"无法读取图片: {path}")
+            return False
+        return True
+
+    def _validate_mock_video(self, path: str) -> bool:
+        cap = cv2.VideoCapture(path)
+        if not cap.isOpened():
+            QMessageBox.warning(self, "文件错误", f"无法打开视频: {path}")
+            return False
+        cap.release()
+        return True
+
+    def _on_browse_mock(self) -> None:
+        mode = self._mode_combo.currentData()
+        if mode == self.MODE_MOCK_IMAGE:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择 Mock 图片",
+                "",
+                "Images (*.png *.jpg *.jpeg *.bmp)",
+            )
+        elif mode == self.MODE_MOCK_VIDEO:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择 Mock 视频",
+                "",
+                "Videos (*.avi *.mp4 *.mkv *.mov)",
+            )
+        else:
+            return
+        if path:
+            self._mock_path_edit.setText(path)
 
     def _on_disconnect(self) -> None:
         self._manager.disconnect()

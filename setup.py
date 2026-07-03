@@ -5,40 +5,12 @@ from ImgTrans import ReceiveImgUDP
 import click
 
 from applications import Applications
+from utils._cap import MockImage, MockVideo  # noqa: F401
 from loguru import logger
 
 _log = logger.bind(module="setup")
 
-class MockCap(cv2.VideoCapture):
-    def __init__(self, frame_path: str) -> None:
-        self.frame = cv2.imread(frame_path)
-
-    def read(self) -> tuple[bool, cv2.typing.MatLike|None]:
-        return True, self.frame if self.frame is not None else None
-    
-class MockVideo(cv2.VideoCapture):
-    def __init__(self, video_path: str) -> None:
-        self.video_path = video_path
-        self.video = cv2.VideoCapture(video_path)
-        if not self.video.isOpened():
-            raise Exception(f"无法打开视频文件: {video_path}")
-        
-    def _reload_video(self):
-        self.video.release()
-        self.video = cv2.VideoCapture(self.video_path)
-        if not self.video.isOpened():
-            raise Exception(f"无法打开视频文件: {self.video_path}")
-    
-    def read(self) -> tuple[bool, cv2.typing.MatLike|None]:
-        # 循环读取
-        ret, frame = self.video.read()
-        if ret:
-            return True, frame
-        else:
-            self._reload_video()
-            return self.read()
-    
-# mockCap = MockCap("test.jpg")
+# mockCap = MockImage("test.jpg")
 mockCap = MockVideo(r"mock_data\test.avi")
 
 class Setup:

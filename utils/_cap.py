@@ -79,6 +79,59 @@ class Cap(cv2.VideoCapture):
         return ret, None
 
 
+class MockImage:
+    """
+    Mock 图片源：重复返回一张静态图片。
+    """
+
+    def __init__(self, frame_path: str) -> None:
+        self._frame_path = frame_path
+        self._frame = cv2.imread(frame_path)
+        self._opened = self._frame is not None
+
+    def read(self, image: cv2.typing.MatLike | None = None) -> tuple[bool, cv2.typing.MatLike | None]:
+        return self._opened, self._frame if self._opened else None
+
+    def isOpened(self) -> bool:
+        return self._opened
+
+    def release(self) -> None:
+        self._frame = None
+        self._opened = False
+
+
+class MockVideo:
+    """
+    Mock 视频源：循环播放本地视频文件。
+    """
+
+    def __init__(self, video_path: str) -> None:
+        self.video_path = video_path
+        self.video = cv2.VideoCapture(video_path)
+        if not self.video.isOpened():
+            raise Exception(f"无法打开视频文件: {video_path}")
+
+    def _reload_video(self) -> None:
+        self.video.release()
+        self.video = cv2.VideoCapture(self.video_path)
+        if not self.video.isOpened():
+            raise Exception(f"无法打开视频文件: {self.video_path}")
+
+    def read(self, image: cv2.typing.MatLike | None = None) -> tuple[bool, cv2.typing.MatLike | None]:
+        ret, frame = self.video.read()
+        if ret:
+            return True, frame
+        else:
+            self._reload_video()
+            return self.read()
+
+    def isOpened(self) -> bool:
+        return self.video.isOpened()
+
+    def release(self) -> None:
+        self.video.release()
+
+
 class InterpolatedCap(Cap):
     """
     运用插值补帧方法的Cap类

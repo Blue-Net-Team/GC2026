@@ -14,7 +14,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-from ._cap import InterpolatedCap, Cap
+from ._cap import InterpolatedCap, Cap, MockImage, MockVideo
 from .UART import Uart
 from .typingCheck import check_args
 from .gpio import Switch, OLED_I2C, LED
@@ -26,6 +26,8 @@ from .env_check import is_desktop_environment
 __all__ = [
     "Cap",
     "InterpolatedCap",
+    "MockImage",
+    "MockVideo",
     "Uart",
     "check_args",
     "Switch",

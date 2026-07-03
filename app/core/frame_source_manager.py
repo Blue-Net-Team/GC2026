@@ -19,6 +19,8 @@ from app.core.device_store import RemoteDevice
 from app.core.frame_source import (
     FrameSource,
     LocalCameraFrameSource,
+    MockImageFrameSource,
+    MockVideoFrameSource,
     SavedDeviceFrameSource,
     UdpFrameSource,
 )
@@ -54,6 +56,12 @@ class FrameSourceManager(QObject):
 
     def connect_saved_device(self, device: RemoteDevice) -> None:
         self._switch_source(SavedDeviceFrameSource(device.name, device.ip, device.port))
+
+    def connect_mock_image(self, image_path: str) -> None:
+        self._switch_source(MockImageFrameSource(image_path))
+
+    def connect_mock_video(self, video_path: str) -> None:
+        self._switch_source(MockVideoFrameSource(video_path))
 
     def disconnect(self) -> None:
         if self._current is not None:

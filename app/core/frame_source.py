@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import socket
 import struct
-import time
+from pathlib import Path
 from typing import Optional
 
 import cv2
 import numpy as np
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from loguru import logger
+from utils._cap import MockImage, MockVideo
 
 _log = logger.bind(module="FrameSource")
 
@@ -308,3 +309,76 @@ class LocalCameraFrameSource(FrameSource):
 
     def source_name(self) -> str:
         return f"本地摄像头 {self.camera_index}"
+
+
+class MockImageFrameSource(FrameSource):
+    """Mock 图片图像源：重复发送同一张静态图片。"""
+
+    def __init__(self, image_path: str, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self.image_path = image_path
+        self._cap = MockImage(image_path)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._read_frame)
+        self._running = False
+
+    def start(self) -> None:
+        if self._running:
+            return
+        if not self._cap.isOpened():
+            self.error_occurred.emit(f"无法打开 Mock 图片: {self.image_path}")
+            return
+        self._running = True
+        self.state_changed.emit("已连接")
+        self._timer.start(33)
+
+    def _read_frame(self) -> None:
+        ret, frame = self._cap.read()
+        if ret and frame is not None:
+            self.frame_received.emit(frame)
+
+    def stop(self) -> None:
+        self._timer.stop()
+        self._cap.release()
+        self._running = False
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def source_name(self) -> str:
+        return f"Mock图片 {Path(self.image_path).name}"
+
+
+class MockVideoFrameSource(FrameSource):
+    """Mock 视频图像源：循环播放本地视频文件。"""
+
+    def __init__(self, video_path: str, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self.video_path = video_path
+        self._cap = MockVideo(video_path)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._read_frame)
+        self._running = False
+
+    def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        self.state_changed.emit("已连接")
+        self._timer.start(33)
+
+    def _read_frame(self) -> None:
+        ret, frame = self._cap.read()
+        if ret and frame is not None:
+            self.frame_received.emit(frame)
+
+    def stop(self) -> None:
+        self._timer.stop()
+        self._cap.release()
+        self._running = False
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def source_name(self) -> str:
+        return f"Mock视频 {Path(self.video_path).name}"

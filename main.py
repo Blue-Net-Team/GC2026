@@ -16,7 +16,7 @@ from utils.file_hash import compute_file_hash
 from utils.hardware_noop import NoOpLED, NoOpSwitch, NoOpOLED
 
 
-_log = logger.bind(module="App")
+_log = logger.bind(module="main")
 
 CONFIG_PATH = "config.yaml"
 

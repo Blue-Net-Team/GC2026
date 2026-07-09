@@ -69,13 +69,12 @@ class SystemConfig:
     detecting_led_pin: str = "GPIO3-A4"
     oled_i2c_port: int = 2
     oled_i2c_address: int = 0x3C
-    camera_index: int | None = None
+    camera_name: str = "icspring camera"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SystemConfig":
-        camera_index = data.get("camera_index")
-        if camera_index is not None:
-            camera_index = int(camera_index)
+        if "camera_index" in data:
+            _log.warning("system.camera_index 已废弃，请改用 system.camera_name")
         return cls(
             serial_port=str(data.get("serial_port", "/dev/ttyS3")),
             udp_interface=str(data.get("udp_interface", "")),
@@ -86,7 +85,7 @@ class SystemConfig:
             detecting_led_pin=str(data.get("detecting_led_pin", "GPIO3-A4")),
             oled_i2c_port=int(data.get("oled_i2c_port", 2)),
             oled_i2c_address=int(data.get("oled_i2c_address", 0x3C)),
-            camera_index=camera_index,
+            camera_name=str(data.get("camera_name", "icspring camera")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -100,7 +99,7 @@ class SystemConfig:
             "detecting_led_pin": self.detecting_led_pin,
             "oled_i2c_port": self.oled_i2c_port,
             "oled_i2c_address": self.oled_i2c_address,
-            "camera_index": self.camera_index,
+            "camera_name": self.camera_name,
         }
 
 

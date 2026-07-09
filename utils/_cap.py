@@ -22,10 +22,10 @@ import re
 
 class Cap(cv2.VideoCapture):
     @staticmethod
-    def getCapIndex():
+    def getCapIndex(camera_name: str):
         try:
             result = subprocess.run(['v4l2-ctl', '--list-devices'], capture_output=True, text=True, check=True)
-            pattern = r"icspring camer.*?\n\s*(/dev/video\d+)\n\s*(/dev/video\d+)"
+            pattern = re.escape(camera_name) + r".*?\n\s*(/dev/video\d+)\n\s*(/dev/video\d+)"
             match = re.search(pattern, result.stdout, re.DOTALL)
             if match:
                 video1 = match.group(1)
@@ -48,11 +48,14 @@ class Cap(cv2.VideoCapture):
         res = self.height - self.NEED2CUT
         return res if res > 0 else self.height
 
-    def __init__(self, _id: int|None = None, w: int = 640, h: int = 480, fps: int = 60) -> None:
+    def __init__(self, _id: int|None = None, camera_name: str = "icspring camera", w: int = 640, h: int = 480, fps: int = 60) -> None:
         if _id is None:
-            caps = Cap.getCapIndex()
-            if caps:
-                _id = int(caps[0])
+            if camera_name:
+                caps = Cap.getCapIndex(camera_name)
+                if caps:
+                    _id = int(caps[0])
+                else:
+                    _id = 0
             else:
                 _id = 0
         self.width = w
@@ -137,8 +140,8 @@ class InterpolatedCap(Cap):
     运用插值补帧方法的Cap类
     """
 
-    def __init__(self, _id: int|None = None) -> None:
-        super().__init__(_id)
+    def __init__(self, _id: int|None = None, camera_name: str = "icspring camera") -> None:
+        super().__init__(_id, camera_name=camera_name)
         self.set(3, 640)
         self.set(4, 480)
         self.set(5, 100)

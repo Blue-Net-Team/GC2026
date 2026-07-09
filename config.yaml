@@ -8,7 +8,7 @@ system:
   detecting_led_pin: "GPIO3-A4"
   oled_i2c_port: 2
   oled_i2c_address: 0x3C
-  camera_index: null
+  camera_name: "icspring camera"
 color:
   B:
     L_S: 41

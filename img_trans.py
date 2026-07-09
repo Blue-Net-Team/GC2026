@@ -18,6 +18,7 @@ import asyncio
 import sys
 
 import cv2
+import yaml
 
 from ImgTrans import SendImgUDP
 from ImgTrans.ImgTrans import LoadWebCam, NeedReConnect
@@ -27,11 +28,22 @@ from loguru import logger
 _log = logger.bind(module="img_trans")
 
 
+def _load_camera_name(path: str = "config.yaml") -> str:
+    """从配置文件中读取摄像头设备名，失败时使用默认值。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return data.get("system", {}).get("camera_name", "icspring camera")
+    except Exception:
+        return "icspring camera"
+
+
 async def main_linux():
     """Linux平台的主函数"""
     stream = await SendImgUDP.create("eth0", 4444)
-    cap = Cap()
-    
+    camera_name = _load_camera_name()
+    cap = Cap(camera_name=camera_name)
+
     # 等待连接
     _log.info(f"等待连接... 当前ip: {stream.host}")
     while True:

@@ -85,13 +85,9 @@ async def _initialize() -> SystemConfig:
     # 2. 摄像头
     try:
         if platform.system() == "Linux":
-            if system.camera_index is not None:
-                CAP = Cap(_id=system.camera_index)
-            else:
-                CAP = Cap()
+            CAP = Cap(camera_name=system.camera_name)
         else:
-            idx = system.camera_index if system.camera_index is not None else 0
-            CAP = cv2.VideoCapture(idx)
+            CAP = cv2.VideoCapture(0)
         if not CAP.isOpened():
             raise RuntimeError("摄像头未能成功打开")
     except Exception as e:

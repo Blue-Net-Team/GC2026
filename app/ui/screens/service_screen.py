@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -18,7 +17,6 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -62,7 +60,9 @@ class ServiceScreen(QWidget):
         self._descriptions = self._load_descriptions()
         self._service_to_row: dict[str, int] = {}
         self._load_buttons: dict[str, QPushButton] = {}
+        # 每组按钮顺序为: (启动/停止切换, 启用/禁用切换, 重启)
         self._op_button_groups: dict[str, tuple[QPushButton, QPushButton, QPushButton]] = {}
+        self._service_states: dict[str, dict[str, str]] = {}
 
         self._build_ui()
         self._device_store.devices_changed.connect(self._refresh_device_combo)
@@ -118,8 +118,6 @@ class ServiceScreen(QWidget):
         self._table.setColumnWidth(0, 200)
         self._table.setColumnWidth(5, 210)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
         self._table.verticalHeader().setDefaultSectionSize(48)
@@ -174,26 +172,26 @@ class ServiceScreen(QWidget):
             load_btn.clicked.connect(lambda _=False, s=service: self._on_load_service(s))
             self._load_buttons[service] = load_btn
 
-            start_btn = QPushButton("启动")
-            start_btn.setFixedSize(54, 26)
-            start_btn.setStyleSheet(self._op_button_style())
-            start_btn.clicked.connect(lambda _=False, s=service: self._on_action(s, "start"))
+            action_btn = QPushButton("启动")
+            action_btn.setFixedSize(54, 26)
+            action_btn.setStyleSheet(self._op_button_style())
+            action_btn.clicked.connect(lambda _=False, s=service: self._on_toggle_active(s))
 
-            stop_btn = QPushButton("停止")
-            stop_btn.setFixedSize(54, 26)
-            stop_btn.setStyleSheet(self._op_secondary_button_style())
-            stop_btn.clicked.connect(lambda _=False, s=service: self._on_action(s, "stop"))
+            enable_btn = QPushButton("启用")
+            enable_btn.setFixedSize(54, 26)
+            enable_btn.setStyleSheet(self._op_secondary_button_style())
+            enable_btn.clicked.connect(lambda _=False, s=service: self._on_toggle_enabled(s))
 
             restart_btn = QPushButton("重启")
             restart_btn.setFixedSize(54, 26)
             restart_btn.setStyleSheet(self._op_secondary_button_style())
             restart_btn.clicked.connect(lambda _=False, s=service: self._on_action(s, "restart"))
 
-            self._op_button_groups[service] = (start_btn, stop_btn, restart_btn)
+            self._op_button_groups[service] = (action_btn, enable_btn, restart_btn)
 
             ops_layout.addWidget(load_btn)
-            ops_layout.addWidget(start_btn)
-            ops_layout.addWidget(stop_btn)
+            ops_layout.addWidget(action_btn)
+            ops_layout.addWidget(enable_btn)
             ops_layout.addWidget(restart_btn)
             ops_layout.addStretch()
             self._table.setCellWidget(row, 5, ops)
@@ -384,6 +382,12 @@ class ServiceScreen(QWidget):
 
         active_text = f"{active} ({sub})" if sub else active
         self._set_service_state(service, active_text, enabled, load)
+        self._service_states[service] = {
+            "active": active,
+            "sub": sub,
+            "enabled": enabled,
+            "load": load,
+        }
         self._update_op_buttons(service, load == "loaded")
 
     def _set_service_state(self, service: str, active: str, enabled: str, load: str) -> None:
@@ -396,17 +400,29 @@ class ServiceScreen(QWidget):
 
     def _update_op_buttons(self, service: str, loaded: bool) -> None:
         load_btn = self._load_buttons.get(service)
-        start_btn, stop_btn, restart_btn = self._op_button_groups.get(service, (None, None, None))
+        action_btn, enable_btn, restart_btn = self._op_button_groups.get(service, (None, None, None))
+        state = self._service_states.get(service, {})
+
         if load_btn is not None:
             load_btn.setVisible(not loaded)
-        if start_btn is not None:
-            start_btn.setVisible(loaded)
-        if stop_btn is not None:
-            stop_btn.setVisible(loaded)
-        if restart_btn is not None:
-            restart_btn.setVisible(loaded)
+
+        for btn in (action_btn, enable_btn, restart_btn):
+            if btn is not None:
+                btn.setVisible(loaded)
+
+        if action_btn is not None:
+            active = state.get("active", "unknown").lower()
+            action_btn.setText("停止" if active == "active" else "启动")
+
+        if enable_btn is not None:
+            enabled = state.get("enabled", "unknown").lower()
+            # enabled-runtime 也表示已启用
+            enable_btn.setText(
+                "禁用" if enabled in ("enabled", "enabled-runtime") else "启用"
+            )
 
     def _on_action(self, service: str, action: str) -> None:
+        """执行固定 action（如 restart）。"""
         dev = self._get_current_device()
         if dev is None:
             return
@@ -420,42 +436,18 @@ class ServiceScreen(QWidget):
             lambda: self._refresh_service_with_auth(device, password, service)
         )
 
-    # ----------------------------------------------------------- Context menu
-    def _on_context_menu(self, pos) -> None:
-        row = self._table.rowAt(pos.y())
-        if row < 0:
-            return
-        service_item = self._table.item(row, 0)
-        if service_item is None:
-            return
-        service = service_item.text()
+    def _on_toggle_active(self, service: str) -> None:
+        """根据当前 ActiveState 切换启动/停止。"""
+        state = self._service_states.get(service, {})
+        action = "stop" if state.get("active", "").lower() == "active" else "start"
+        self._on_action(service, action)
 
-        menu = QMenu(self)
-        refresh_action = menu.addAction("刷新状态")
-        enable_action = menu.addAction("启用开机自启")
-        disable_action = menu.addAction("禁用开机自启")
-
-        action = menu.exec(self._table.viewport().mapToGlobal(pos))
-        if action == refresh_action:
-            self._refresh_service(service)
-        elif action == enable_action:
-            self._run_simple_action(service, "enable")
-        elif action == disable_action:
-            self._run_simple_action(service, "disable")
-
-    def _run_simple_action(self, service: str, action: str) -> None:
-        dev = self._get_current_device()
-        if dev is None:
-            return
-        device, password = dev
-        command = f"sudo -S systemctl {action} {service}"
-        self._append_output(f"$ sudo -S systemctl {action} {service}")
-        worker = self._start_worker(
-            device, password, command, stdin_data=f"{password}\n"
-        )
-        worker.finished.connect(
-            lambda: self._refresh_service_with_auth(device, password, service)
-        )
+    def _on_toggle_enabled(self, service: str) -> None:
+        """根据当前 UnitFileState 切换启用/禁用。"""
+        state = self._service_states.get(service, {})
+        enabled = state.get("enabled", "").lower()
+        action = "disable" if enabled in ("enabled", "enabled-runtime") else "enable"
+        self._on_action(service, action)
 
     # ----------------------------------------------------------- Load service
     def _on_load_service(self, service: str) -> None:

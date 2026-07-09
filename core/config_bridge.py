@@ -1,11 +1,15 @@
 """
 Copyright (C) 2025 IVEN-CN(He Yunfeng)
 
-GC2026 桌面调参应用 - 配置桥接
+GC2026 配置桥接（项目级共享）
 ====
 负责与 GC2026 的 config.yaml 格式保持兼容，提供颜色/色环参数的读写。
 
 默认值优先从 detector 的 TUNABLE_PARAMS schema 推导，避免多处硬编码不一致。
+
+注意：此模块被嵌入式主程序（main.py）和桌面调参应用（app）共同使用，
+请勿在此引入 app 专属的 GUI 依赖（如 PyQt6 / qasync），否则会导致板卡上
+只安装基础依赖时无法启动主程序。
 """
 
 from __future__ import annotations

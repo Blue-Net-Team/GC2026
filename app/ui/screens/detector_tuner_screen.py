@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import ConfigBridge
+from core.config_bridge import ConfigBridge
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme
 from app.ui.widgets.parameter_group_panel import ParameterGroupPanel

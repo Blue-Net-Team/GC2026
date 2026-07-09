@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import ConfigBridge
+from core.config_bridge import ConfigBridge
 from app.core.device_store import DeviceStore, RemoteDevice
 from app.core.ssh_worker import SshCommandWorker
 from app.ui.theme import AppTheme

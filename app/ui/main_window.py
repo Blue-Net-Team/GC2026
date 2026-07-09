@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from loguru import logger
 
-from app.core.config_bridge import ConfigBridge
+from core.config_bridge import ConfigBridge
 from app.core.device_store import DeviceStore
 from app.core.frame_source_manager import FrameSourceManager
 from app.ui.theme import AppTheme

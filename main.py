@@ -8,7 +8,7 @@ import yaml
 from loguru import logger
 
 from ImgTrans import SendImgUDP
-from app.core.config_bridge import SystemConfig
+from core.config_bridge import SystemConfig
 from applications import Applications
 from utils import Cap, Uart, is_desktop_environment
 from utils import Switch, LED, OLED_I2C

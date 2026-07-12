@@ -142,6 +142,7 @@ async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
                     # 读取过程中串口断开，直接进入下一轮重连
                     continue
                 # 超时未收到任务，避免空转，短暂让出事件循环
+                _log.info("未收到任务")
                 await asyncio.sleep(0.05)
                 continue
             _log.info(f"收到任务: {task_sign}")

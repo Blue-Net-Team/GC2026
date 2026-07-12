@@ -309,6 +309,11 @@ class ReceiverScreen(QWidget):
                 return
             self._manager.connect_udp(ip, port)
 
+        # 连接发起后统一更新 UI，不再依赖后续 "已连接/重连中" 状态
+        self._connect_btn.setEnabled(False)
+        self._disconnect_btn.setEnabled(True)
+        self._status_label.setText("等待图像")
+
     def _validate_mock_image(self, path: str) -> bool:
         frame = cv2.imread(path)
         if frame is None:
@@ -347,8 +352,10 @@ class ReceiverScreen(QWidget):
 
     def _on_disconnect(self) -> None:
         self._manager.disconnect()
-        self._video.setText("等待连接")
+        self._video.setText("等待图像")
         self._video.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._connect_btn.setEnabled(True)
+        self._disconnect_btn.setEnabled(False)
 
     def _on_frame_received(self, frame: np.ndarray) -> None:
         self._video.set_frame(frame)
@@ -364,11 +371,17 @@ class ReceiverScreen(QWidget):
             self._frame_count_label.setText(f"帧数: {self._frame_count}")
 
     def _on_state_changed(self, state: str) -> None:
-        self._status_label.setText(state)
-        # 连接中和已连接状态都允许断开，且禁止重复点击连接
-        connecting_or_connected = state in ("连接中", "已连接", "重连中")
-        self._connect_btn.setEnabled(not connecting_or_connected)
-        self._disconnect_btn.setEnabled(connecting_or_connected)
+        # UDP 图传不再维护 "已连接/重连中" 状态，仅保留未连接/错误/已连接（本地摄像头/Mock）的显示
+        if state == "未连接":
+            self._status_label.setText("未连接")
+            self._connect_btn.setEnabled(True)
+            self._disconnect_btn.setEnabled(False)
+        elif state == "错误":
+            self._status_label.setText("连接错误")
+            self._connect_btn.setEnabled(True)
+            self._disconnect_btn.setEnabled(False)
+        elif state == "已连接":
+            self._status_label.setText("已连接")
 
     def _on_source_name_changed(self, name: str) -> None:
         self._status_label.setText(name)

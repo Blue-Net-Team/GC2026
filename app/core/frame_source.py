@@ -74,20 +74,17 @@ class _UdpWorker(QObject):
 
         self._socket: Optional[socket.socket] = None
         self._running = False
-        self._connected = False
         self._recv_buffer: Optional[bytearray] = None
         self._recv_total = 0
         self._recv_received = 0
 
     def start(self) -> None:
         self._running = True
-        self._connected = False
         self._connect()
         self._receive_loop()
 
     def stop(self) -> None:
         self._running = False
-        self._connected = False
         if self._socket is not None:
             try:
                 self._socket.close()
@@ -97,7 +94,6 @@ class _UdpWorker(QObject):
 
     def _connect(self) -> None:
         try:
-            self.state_changed.emit("连接中")
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.bind((self.self_ip, self.port))
@@ -145,7 +141,6 @@ class _UdpWorker(QObject):
 
             except socket.timeout:
                 self._reset_frame_state()
-                self._reconnect_if_needed()
             except OSError:
                 break
             except Exception as e:
@@ -156,21 +151,7 @@ class _UdpWorker(QObject):
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is not None:
-            if not self._connected:
-                self._connected = True
-                self.state_changed.emit("已连接")
             self.frame_received.emit(frame)
-
-    def _reconnect_if_needed(self) -> None:
-        if not self._running or self._socket is None:
-            return
-        try:
-            if self._connected:
-                self._connected = False
-                self.state_changed.emit("重连中")
-            self._socket.sendto(b"connect", (self.server_ip, self.port))
-        except OSError as e:
-            _log.warning(f"重连失败: {e}")
 
 
 class UdpFrameSource(FrameSource):

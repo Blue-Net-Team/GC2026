@@ -382,7 +382,11 @@ class MainWindow(QMainWindow):
         self._sidebar.update_connection_status(state, device_name=name, address=address)
 
     def _on_source_name_changed(self, name: str) -> None:
-        state = "已连接" if self._frame_source_manager.is_connected() else "未连接"
+        # UDP 图传不维护连接状态，连接后显示“等待图像”而非“已连接”
+        if name.startswith("UDP") and self._frame_source_manager.is_connected():
+            state = "等待图像"
+        else:
+            state = "已连接" if self._frame_source_manager.is_connected() else "未连接"
         address = "--"
         if name and name != "未连接" and not name.startswith("本地摄像头"):
             address = name

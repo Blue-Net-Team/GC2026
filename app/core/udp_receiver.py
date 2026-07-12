@@ -28,8 +28,6 @@ class ConnectionState(Enum):
 
     DISCONNECTED = "未连接"
     CONNECTING = "连接中"
-    CONNECTED = "已连接"
-    RECONNECTING = "重连中"
     ERROR = "错误"
 
 
@@ -116,14 +114,12 @@ class _UdpReceiverWorker(QObject):
 
     def _connect(self) -> None:
         try:
-            self.state_changed.emit(ConnectionState.CONNECTING.value)
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.bind((self.self_ip, self.port))
             self._socket.settimeout(self.CONNECT_TIMEOUT)
             self._socket.sendto(b"connect", (self.server_ip, self.port))
             self._stats.connected_at = time.time()
-            self.state_changed.emit(ConnectionState.CONNECTED.value)
             _log.info(f"已向 {self.server_ip}:{self.port} 发送 connect 请求")
         except OSError as e:
             self.state_changed.emit(ConnectionState.ERROR.value)
@@ -171,7 +167,6 @@ class _UdpReceiverWorker(QObject):
             except socket.timeout:
                 self._reset_frame_state()
                 self._stats.lost_frames += 1
-                self._reconnect_if_needed()
             except OSError:
                 # socket 已被关闭，退出循环
                 break
@@ -196,15 +191,6 @@ class _UdpReceiverWorker(QObject):
             self.stats_changed.emit(self._stats)
 
         self.frame_received.emit(frame)
-
-    def _reconnect_if_needed(self) -> None:
-        if not self._running or self._socket is None:
-            return
-        try:
-            self.state_changed.emit(ConnectionState.RECONNECTING.value)
-            self._socket.sendto(b"connect", (self.server_ip, self.port))
-        except OSError as e:
-            _log.warning(f"重连失败: {e}")
 
 
 class UdpReceiver(QObject):

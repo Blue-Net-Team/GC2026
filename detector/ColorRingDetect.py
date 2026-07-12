@@ -159,26 +159,10 @@ class ColorRingDetector(Detect):
 
     def __init__(self) -> None:
         """
-        初始化色环检测器，并创建圆心滑动中值滤波的历史缓冲区。
+        初始化色环检测器。
         """
         super().__init__()
-        self._center_history: list[tuple[int, int]] = []
-        self._filter_window = 5
-        self._last_raw_center: tuple[int, int] | None = None
-        self._last_filtered_center: tuple[int, int] | None = None
-
-    def _filter_center(self, center: tuple[int, int]) -> tuple[int, int]:
-        """
-        滑动窗口中值滤波，抑制霍夫圆检测的帧间抖动。
-        """
-        self._center_history.append(center)
-        if len(self._center_history) > self._filter_window:
-            self._center_history.pop(0)
-
-        xs = sorted(p[0] for p in self._center_history)
-        ys = sorted(p[1] for p in self._center_history)
-        mid = len(xs) // 2
-        return xs[mid], ys[mid]
+        self._last_center: tuple[int, int] | None = None
 
     def __callback(self, x):
         try:
@@ -331,7 +315,6 @@ class ColorRingDetector(Detect):
         检测色环
         ----
         组合 binarization() 与 get_circles()，返回完整圆列表和预处理图像。
-        对半径最大的圆心做滑动中值滤波，返回的 circles[0] 为滤波后的结果。
 
         :param _img: 需要检测的图片
         :return: (圆列表 [(x, y, r), ...], 预处理后的单通道图像)
@@ -341,11 +324,7 @@ class ColorRingDetector(Detect):
         circles = await self.get_circles(binary)
 
         if circles:
-            raw_center = circles[0][:2]
-            filtered_center = self._filter_center(raw_center)
-            self._last_raw_center = raw_center
-            self._last_filtered_center = filtered_center
-            circles[0] = (*filtered_center, circles[0][2])
+            self._last_center = circles[0][:2]
 
         return circles, binary
 
@@ -358,8 +337,7 @@ class ColorRingDetector(Detect):
         """
         在原图上绘制检测到的色环和圆心。
 
-        红色圆圈为检测到的圆环；蓝色小点为原始圆心；绿色十字为滤波后的圆心
-        （即 detect() 返回的 circles[0] 圆心，也是实际用于控制算法的值）。
+        红色圆圈为检测到的圆环；绿色十字为实际使用的圆心。
 
         :param frame: 原始图像
         :param result: detect() 返回的圆列表 [(x, y, r), ...]
@@ -371,13 +349,9 @@ class ColorRingDetector(Detect):
             for x, y, r in result:
                 cv2.circle(output, (int(x), int(y)), int(r), (0, 0, 255), 2)
 
-            # 蓝色小点：原始圆心
-            if self._last_raw_center is not None:
-                cv2.circle(output, self._last_raw_center, 3, (255, 0, 0), -1)
-
-            # 绿色十字：滤波后的圆心（实际使用值）
-            if self._last_filtered_center is not None:
-                self._draw_crosshair(output, self._last_filtered_center, (0, 255, 0), size=10, thickness=2)
+            # 绿色十字：实际使用的圆心
+            if self._last_center is not None:
+                self._draw_crosshair(output, self._last_center, (0, 255, 0), size=10, thickness=2)
 
         return output
 
@@ -414,7 +388,7 @@ class ColorRingDetector(Detect):
         """
         可视化色环检测结果
         ----
-        调用 draw_overlay() 在原图上绘制检测圆、原始圆心和滤波圆心，
+        调用 draw_overlay() 在原图上绘制检测圆和圆心，
         并与二值化图纵向拼接。供独立调参窗口使用。
 
         :param _img: 原始图像
@@ -502,7 +476,5 @@ class ColorRingDetector(Detect):
             if param.param_type == "int":
                 setattr(self, param.key, int(round(getattr(self, param.key))))
 
-        # 参数发生变化后，清空历史滤波缓冲区，避免旧位置影响新配置
-        self._center_history.clear()
-        self._last_raw_center = None
-        self._last_filtered_center = None
+        # 参数发生变化后，清空历史状态，避免旧位置影响新配置
+        self._last_center = None

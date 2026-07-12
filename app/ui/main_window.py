@@ -268,7 +268,7 @@ class Sidebar(QWidget):
             color = AppTheme.colors.accent_success
         elif "错误" in status:
             color = AppTheme.colors.accent_error
-        elif "连接中" in status or "重连" in status:
+        elif "连接中" in status or "重连" in status or "检测中" in status:
             color = AppTheme.colors.accent_warning
 
         self._status_badge.setText(f"● {status}")
@@ -291,6 +291,7 @@ class MainWindow(QMainWindow):
         self._config_bridge = config_bridge
         self._frame_source_manager = frame_source_manager
         self._device_store = device_store
+        self._device_connection_state = "未连接"
 
         self.setWindowTitle("工创2026调参")
         self.resize(1280, 800)
@@ -365,6 +366,9 @@ class MainWindow(QMainWindow):
         # 连接图像源状态变化
         self._frame_source_manager.state_changed.connect(self._on_source_state_changed)
         self._frame_source_manager.source_name_changed.connect(self._on_source_name_changed)
+        self._frame_source_manager.device_connection_state_changed.connect(
+            self._on_device_connection_state_changed
+        )
 
     def _on_screen_changed(self, index: int) -> None:
         self._stack.setCurrentIndex(index)
@@ -374,22 +378,31 @@ class MainWindow(QMainWindow):
         elif widget is self._service_screen:
             self._service_screen.refresh_devices()
 
+    def _on_device_connection_state_changed(self, state: str) -> None:
+        self._device_connection_state = state
+        self._update_sidebar_connection_status()
+
     def _on_source_state_changed(self, state: str) -> None:
+        self._update_sidebar_connection_status()
+
+    def _on_source_name_changed(self, name: str) -> None:
+        if self._frame_source_manager.is_pinger_running():
+            self._device_connection_state = "检测中"
+        self._update_sidebar_connection_status()
+
+    def _update_sidebar_connection_status(self) -> None:
         name = self._frame_source_manager.current_name
         address = "--"
         if name and name != "未连接" and not name.startswith("本地摄像头"):
             address = name
-        self._sidebar.update_connection_status(state, device_name=name, address=address)
 
-    def _on_source_name_changed(self, name: str) -> None:
-        # UDP 图传不维护连接状态，连接后显示“等待图像”而非“已连接”
-        if name.startswith("UDP") and self._frame_source_manager.is_connected():
-            state = "等待图像"
+        if self._frame_source_manager.is_pinger_running():
+            state = self._device_connection_state
+        elif self._frame_source_manager.is_connected():
+            state = "已连接"
         else:
-            state = "已连接" if self._frame_source_manager.is_connected() else "未连接"
-        address = "--"
-        if name and name != "未连接" and not name.startswith("本地摄像头"):
-            address = name
+            state = "未连接"
+
         self._sidebar.update_connection_status(state, device_name=name, address=address)
 
     def closeEvent(self, event) -> None:  # type: ignore[override]

@@ -15,6 +15,7 @@ import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal
 from loguru import logger
 
+from app.core.device_pinger import DevicePinger
 from app.core.device_store import RemoteDevice
 from app.core.frame_source import (
     FrameSource,
@@ -35,11 +36,16 @@ class FrameSourceManager(QObject):
     state_changed = pyqtSignal(str)
     source_name_changed = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    device_connection_state_changed = pyqtSignal(str)
+    device_latency_changed = pyqtSignal(float)
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._current: Optional[FrameSource] = None
         self._current_name: str = "未连接"
+        self._pinger = DevicePinger(parent=self)
+        self._pinger.state_changed.connect(self.device_connection_state_changed)
+        self._pinger.latency_changed.connect(self.device_latency_changed)
 
     @property
     def current_name(self) -> str:
@@ -47,6 +53,9 @@ class FrameSourceManager(QObject):
 
     def is_connected(self) -> bool:
         return self._current is not None and self._current.is_running()
+
+    def is_pinger_running(self) -> bool:
+        return self._pinger.is_running()
 
     def connect_local_camera(self, camera_index: int = 0) -> None:
         self._switch_source(LocalCameraFrameSource(camera_index))
@@ -64,6 +73,7 @@ class FrameSourceManager(QObject):
         self._switch_source(MockVideoFrameSource(video_path))
 
     def disconnect(self) -> None:
+        self._pinger.stop()
         if self._current is not None:
             self._current.stop()
             self._current.deleteLater()
@@ -76,6 +86,11 @@ class FrameSourceManager(QObject):
         self.disconnect()
         self._current = source
         self._current_name = source.source_name()
+
+        # 对 UDP 源启动网络可达性探测
+        if isinstance(source, UdpFrameSource):
+            self._pinger.start(source.server_ip)
+            self.device_connection_state_changed.emit("检测中")
 
         source.frame_received.connect(self.frame_received)
         source.state_changed.connect(self._on_state_changed)

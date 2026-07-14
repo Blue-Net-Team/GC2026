@@ -260,10 +260,12 @@ async def config_watcher():
             _log.error(f"配置文件监视异常: {e}")
 
 
-async def img_trans(port: int, interface: str):
+async def img_trans(port: int, interface: str, udp_target_ip: str = ""):
     global img_need_to_send, server_ip
     # 绑定所有网卡，UDP 图传
-    sendImgUDP = await SendImgUDP.create(interface=interface, port=port)
+    sendImgUDP = await SendImgUDP.create(
+        interface=interface, port=port, default_client_ip=udp_target_ip
+    )
     _log.info("UDP 服务已启动 (监听所有网卡)")
 
     # 从可用网卡获取一个 IP 地址用于 OLED 显示
@@ -275,12 +277,15 @@ async def img_trans(port: int, interface: str):
                 server_ip = ip
             break
 
-    connected = False
-    while not connected:
-        connected = await sendImgUDP.connecting()
-        if not connected:
-            await asyncio.sleep(0.1)
-    _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
+    if sendImgUDP.has_default_client:
+        _log.info(f"使用配置的目标客户端 IP 发送图像: {sendImgUDP.B_IP}")
+    else:
+        connected = False
+        while not connected:
+            connected = await sendImgUDP.connecting()
+            if not connected:
+                await asyncio.sleep(0.1)
+        _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
 
     while True:
         # 使用锁保护读取操作
@@ -331,7 +336,7 @@ async def run() -> bool:
     await asyncio.gather(
         main(CAP, ser, task_table),
         board_show(),
-        img_trans(system.udp_port, system.udp_interface),
+        img_trans(system.udp_port, system.udp_interface, system.udp_target_ip),
         config_watcher(),
     )
     return True

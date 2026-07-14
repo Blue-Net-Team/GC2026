@@ -226,13 +226,16 @@ uv run setup colorring --capid 0
 
 ### 5.1 `main.py` 中的图传常量
 
-```python
-SERVER_INTERFACE = ""    # 空字符串表示监听所有网卡
-SERVER_PORT = 8080       # UDP 图传端口
+```yaml
+system:
+  udp_interface: ""       # 空字符串表示监听所有网卡
+  udp_port: 8080          # UDP 图传端口
+  udp_target_ip: ""       # 预配置接收端 IP，空字符串表示等待 connect 握手
 ```
 
-- 修改端口只需改 `SERVER_PORT`；
-- `SERVER_INTERFACE` 一般保持 `""`，否则绑定指定网卡可能导致某些网络环境下客户端无法连接。
+- `udp_interface` 一般保持 `""`，否则绑定指定网卡可能导致某些网络环境下客户端无法连接。
+- `udp_target_ip` 为空时，服务端启动后等待客户端发送 `connect`；填写 PC 端 IP 后，服务端启动会立即向该 IP 发送图像。
+- 无论是否配置了 `udp_target_ip`，收到新的 `connect` 请求都会切换到新客户端。
 
 ### 5.2 `img_trans.py` 中的独立图传配置
 
@@ -271,7 +274,7 @@ cap = LoadWebCam("192.168.123.6", 4444, "192.168.123.2")
 
 ### 6.3 多客户端同时连接
 
-当前实现只保留**最后一个**发送 `connect` 的客户端 IP。如果需要多人同时观看，需要在 `ImgTrans/ImgTrans.py` 中自行扩展客户端列表逻辑。
+当前实现只保留**最后一个**发送 `connect` 的客户端 IP。即使配置了 `udp_target_ip`，新的 `connect` 请求也会覆盖它。如果需要多人同时观看，需要在 `ImgTrans/ImgTrans.py` 中自行扩展客户端列表逻辑。
 
 ### 6.4 发送端切换网络后客户端没反应
 

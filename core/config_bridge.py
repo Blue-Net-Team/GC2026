@@ -63,6 +63,7 @@ class SystemConfig:
     serial_port: str = "/dev/ttyS3"
     udp_interface: str = ""
     udp_port: int = 8080
+    udp_target_ip: str = ""
     switch_pin: str = "GPIO3-A3"
     switch_reverse: bool = True
     start_led_pin: str = "GPIO3-A2"
@@ -79,6 +80,7 @@ class SystemConfig:
             serial_port=str(data.get("serial_port", "/dev/ttyS3")),
             udp_interface=str(data.get("udp_interface", "")),
             udp_port=int(data.get("udp_port", 8080)),
+            udp_target_ip=str(data.get("udp_target_ip", "")),
             switch_pin=str(data.get("switch_pin", "GPIO3-A3")),
             switch_reverse=bool(data.get("switch_reverse", True)),
             start_led_pin=str(data.get("start_led_pin", "GPIO3-A2")),
@@ -93,6 +95,7 @@ class SystemConfig:
             "serial_port": self.serial_port,
             "udp_interface": self.udp_interface,
             "udp_port": self.udp_port,
+            "udp_target_ip": self.udp_target_ip,
             "switch_pin": self.switch_pin,
             "switch_reverse": self.switch_reverse,
             "start_led_pin": self.start_led_pin,

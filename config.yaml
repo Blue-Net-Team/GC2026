@@ -2,6 +2,7 @@ system:
   serial_port: "/dev/ttyS3"
   udp_interface: ""
   udp_port: 8080
+  udp_target_ip: ""
   switch_pin: "GPIO3-A3"
   switch_reverse: true
   start_led_pin: "GPIO3-A2"

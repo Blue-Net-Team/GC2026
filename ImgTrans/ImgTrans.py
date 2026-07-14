@@ -247,30 +247,55 @@ class SendImgUDP(SendImg):
         if self.B_IP:
             self._ip_lst.add(self.B_IP)
 
-    def __init__(self, interface:str, port:int):
+    def __init__(self, interface:str, port:int, default_client_ip:str=""):
         """
         初始化
         ----
         Args:
             interface (str): 服务端开放的网卡设备
             port (int): 端口号
+            default_client_ip (str): 默认目标客户端 IP，留空则等待 connect 握手
         """
         super().__init__(interface, port)
         self.server_socket = None
-    
+        self.default_client_ip = self._normalize_client_ip(default_client_ip)
+
+    @staticmethod
+    def _normalize_client_ip(raw: str) -> str:
+        """校验并规范化默认客户端 IP，无效时返回空字符串"""
+        if not raw:
+            return ""
+        raw = raw.strip()
+        try:
+            socket.inet_aton(raw)
+        except OSError:
+            _log.warning(f"default_client_ip {raw!r} 不是有效 IPv4 地址，将等待客户端 connect")
+            return ""
+        return raw
+
+    @property
+    def has_default_client(self) -> bool:
+        """是否配置了默认目标客户端"""
+        return bool(self.default_client_ip)
+
     @classmethod
-    async def create(cls, interface:str, port:int):
+    async def create(cls, interface:str, port:int, default_client_ip:str=""):
         """
         异步创建对象
         ----
         Args:
             interface (str): 服务端开放的网卡设备
             port (int): 端口号
+            default_client_ip (str): 默认目标客户端 IP
         Returns:
             SendImgUDP: 初始化完成的对象
         """
-        instance = cls(interface, port)
+        instance = cls(interface, port, default_client_ip)
         await instance.openSocket()
+        if instance.has_default_client:
+            instance.B_IP = instance.default_client_ip
+            instance._ip_lst = {instance.default_client_ip}
+            _log.info(f"已配置默认目标客户端 IP，将主动向 {instance.default_client_ip} 发送图像")
         return instance
 
     def _sync_open_socket(self):
@@ -287,6 +312,9 @@ class SendImgUDP(SendImg):
 
     def _sync_connecting(self):
         """同步版本：等待udp客户端连接"""
+        # 已配置默认客户端时无需等待握手
+        if self.has_default_client:
+            return True
         try:
             if self.server_socket is None:
                 self._sync_open_socket()

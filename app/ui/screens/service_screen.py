@@ -35,6 +35,7 @@ _log = logger.bind(module="ServiceScreen")
 
 _SERVICES = (
     "run-main-auto.service",
+    "clear-run-main-logs.service",
     "gpio-setup.service",
     "ttys3-permission.service",
     "board_led_setup.service",
@@ -43,6 +44,7 @@ _SERVICES = (
 
 _DESCRIPTION_FALLBACK = {
     "run-main-auto.service": "主程序自动启动服务",
+    "clear-run-main-logs.service": "开机清空 main 服务日志",
     "gpio-setup.service": "GPIO 初始化服务",
     "ttys3-permission.service": "ttyS3 串口权限设置",
     "board_led_setup.service": "板载 LED 状态灯服务",

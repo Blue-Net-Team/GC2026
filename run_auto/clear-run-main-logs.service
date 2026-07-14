@@ -1,0 +1,13 @@
+[Unit]
+Description=Clear run-main-auto.service logs on boot
+After=systemd-journald.service
+Before=run-main-auto.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/journalctl --unit=run-main-auto.service --rotate --vacuum-time=1s
+RemainAfterExit=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target

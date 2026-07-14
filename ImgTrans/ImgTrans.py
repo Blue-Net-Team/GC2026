@@ -278,6 +278,31 @@ class SendImgUDP(SendImg):
         """是否配置了默认目标客户端"""
         return bool(self.default_client_ip)
 
+    def set_default_client(self, ip: str) -> bool:
+        """
+        动态更新默认目标客户端 IP
+        ----
+        传入空字符串表示清空默认目标，恢复等待 connect 握手。
+        Args:
+            ip (str): 新的默认目标客户端 IP
+        Returns:
+            bool: 是否发生了实际变更
+        """
+        new_ip = self._normalize_client_ip(ip)
+        if new_ip == self.default_client_ip:
+            return False
+
+        self.default_client_ip = new_ip
+        if new_ip:
+            self.B_IP = new_ip
+            self._ip_lst = {new_ip}
+            _log.info(f"默认目标客户端 IP 已更新为 {new_ip}")
+        else:
+            self.B_IP = ""
+            self._ip_lst = set()
+            _log.info("默认目标客户端 IP 已清空，将等待 connect 握手")
+        return True
+
     @classmethod
     async def create(cls, interface:str, port:int, default_client_ip:str=""):
         """

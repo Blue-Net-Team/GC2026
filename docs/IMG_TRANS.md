@@ -236,6 +236,7 @@ system:
 - `udp_interface` 一般保持 `""`，否则绑定指定网卡可能导致某些网络环境下客户端无法连接。
 - `udp_target_ip` 为空时，服务端启动后等待客户端发送 `connect`；填写 PC 端 IP 后，服务端启动会立即向该 IP 发送图像。
 - 无论是否配置了 `udp_target_ip`，收到新的 `connect` 请求都会切换到新客户端。
+- `udp_target_ip` 支持热加载：修改 `config.yaml` 后约 1 秒内生效，无需重启 `uv run main`。
 
 ### 5.2 `img_trans.py` 中的独立图传配置
 

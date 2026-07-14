@@ -45,6 +45,10 @@ content_lock = asyncio.Lock()
 server_ip = ""
 server_ip_lock = asyncio.Lock()
 
+# 当前生效的 UDP 目标客户端 IP（config.yaml 热加载同步用）
+current_udp_target_ip = ""
+udp_target_ip_lock = asyncio.Lock()
+
 
 class InitializationError(Exception):
     """初始化阶段出现无法继续运行的致命错误"""
@@ -62,7 +66,7 @@ def _load_system_config(path: str) -> SystemConfig:
 
 async def _initialize() -> SystemConfig:
     """集中初始化所有硬件与核心对象，失败时抛出 InitializationError。"""
-    global applications, switch, start_LED, detecting_LED, oled, CAP
+    global applications, switch, start_LED, detecting_LED, oled, CAP, current_udp_target_ip
 
     # 1. 配置文件
     config_file = Path(CONFIG_PATH)
@@ -75,6 +79,10 @@ async def _initialize() -> SystemConfig:
     except Exception as e:
         _log.error(f"config.yaml 加载失败，请检查文件格式与字段: {e}")
         raise InitializationError("配置加载失败") from e
+
+    # 同步初始 UDP 目标客户端 IP（后续 config_watcher 会热更新）
+    async with udp_target_ip_lock:
+        current_udp_target_ip = system.udp_target_ip
 
     try:
         applications = Applications(config_path=CONFIG_PATH)
@@ -236,12 +244,17 @@ async def config_watcher():
     """配置文件热加载监视线程
 
     通过周期性计算 config.yaml 的 SHA-256 hash，检测文件内容是否发生变化，
-    变化时调用 Applications.reload_config() 重新加载检测器参数。
+    变化时调用 Applications.reload_config() 重新加载检测器参数，并同步更新
+    system.udp_target_ip。
     """
     assert applications is not None, "applications 未初始化"
 
+    global current_udp_target_ip
+
     _log.info(f"启动配置文件热加载监视: {CONFIG_PATH}")
     last_hash = compute_file_hash(CONFIG_PATH)
+    async with udp_target_ip_lock:
+        last_target_ip = current_udp_target_ip
 
     while True:
         await asyncio.sleep(1.0)
@@ -255,6 +268,20 @@ async def config_watcher():
             if current_hash != last_hash:
                 _log.info("检测到配置文件变化，开始重新加载")
                 await applications.reload_config()
+
+                # 同步 system 段中的 udp_target_ip
+                try:
+                    new_system = _load_system_config(CONFIG_PATH)
+                    async with udp_target_ip_lock:
+                        if new_system.udp_target_ip != current_udp_target_ip:
+                            _log.info(
+                                f"udp_target_ip 热更新: {current_udp_target_ip!r} -> {new_system.udp_target_ip!r}"
+                            )
+                            current_udp_target_ip = new_system.udp_target_ip
+                            last_target_ip = current_udp_target_ip
+                except Exception as e:
+                    _log.error(f"system 段热加载失败: {e}")
+
                 last_hash = current_hash
         except Exception as e:
             _log.error(f"配置文件监视异常: {e}")
@@ -288,6 +315,12 @@ async def img_trans(port: int, interface: str, udp_target_ip: str = ""):
         _log.info(f"UDP 客户端已连接: {sendImgUDP.B_IP}")
 
     while True:
+        # 热加载：同步最新的 udp_target_ip
+        async with udp_target_ip_lock:
+            latest_target = current_udp_target_ip
+        if latest_target != sendImgUDP.default_client_ip:
+            sendImgUDP.set_default_client(latest_target)
+
         # 使用锁保护读取操作
         async with img_lock:
             current_img = img_need_to_send

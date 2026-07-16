@@ -154,10 +154,6 @@ async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
                 await asyncio.sleep(0.05)
                 continue
             _log.info(f"收到任务: {task_sign}")
-            
-            # 清理缓存，避免读取到旧图像
-            for i in range(20):
-                ret, img = cap.read()
 
             ret, img = cap.read()
             if not ret:
@@ -356,11 +352,16 @@ async def run() -> bool:
 
     assert applications is not None, "applications 未初始化"
     assert CAP is not None, "CAP 未初始化"
+    
+    async def detect_material(img: cv2.typing.MatLike, color_label: str):
+        for i in range(10):
+            ret, img = CAP.read()
+        return await applications.detect_material(img, color_label)
 
     task_table = {
-        "R": (applications.detect_material, "R"),
-        "G": (applications.detect_material, "G"),
-        "B": (applications.detect_material, "B"),
+        "R": (detect_material, "R"),
+        "G": (detect_material, "G"),
+        "B": (detect_material, "B"),
         "C": (applications.detect_circle, None),
     }
 

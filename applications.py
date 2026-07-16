@@ -63,6 +63,9 @@ class Applications:
             return None, draw_img
 
         cx, cy, _w, _h = result
+        
+        if cy < 200:        # 远的就不发
+            return None, draw_img
         _log.info(f"检测到物料中心点: ({cx}, {cy})")
         return (cx, cy), draw_img
 

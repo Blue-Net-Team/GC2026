@@ -354,7 +354,7 @@ async def run() -> bool:
     assert CAP is not None, "CAP 未初始化"
     
     async def detect_material(img: cv2.typing.MatLike, color_label: str):
-        for i in range(10):
+        for i in range(2):
             ret, img = CAP.read()
         return await applications.detect_material(img, color_label)
 

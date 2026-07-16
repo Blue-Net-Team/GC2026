@@ -154,6 +154,10 @@ async def main(cap: cv2.VideoCapture, ser: Uart, task_table: dict):
                 await asyncio.sleep(0.05)
                 continue
             _log.info(f"收到任务: {task_sign}")
+            
+            # 清理缓存，避免读取到旧图像
+            for i in range(20):
+                ret, img = cap.read()
 
             ret, img = cap.read()
             if not ret:

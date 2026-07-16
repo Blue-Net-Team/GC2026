@@ -316,12 +316,12 @@ class ConfigScreen(QWidget):
             return
 
         remote_path = f"{device.code_path}/config.yaml"
-        command = f"sudo -S bash -c 'cat > {remote_path}'"
+        command = f"bash -c 'cat > {remote_path}'"
         worker = self._start_ssh_worker(
             device,
             password,
             command,
-            stdin_data=f"{password}\n{content}",
+            stdin_data=content,
         )
         worker.output.connect(lambda text: self._on_upload_done(device, text))
         worker.error.connect(lambda msg: QMessageBox.critical(self, "上传失败", msg))

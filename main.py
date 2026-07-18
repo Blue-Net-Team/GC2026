@@ -353,16 +353,17 @@ async def run() -> bool:
     assert applications is not None, "applications 未初始化"
     assert CAP is not None, "CAP 未初始化"
     
-    async def detect_material(img: cv2.typing.MatLike, color_label: str):
-        for i in range(2):
+    async def reflesh_img(img: cv2.typing.MatLike, t: str):
+        for i in range(5):
             ret, img = CAP.read()
-        return await applications.detect_material(img, color_label)
+        return None, img
 
     task_table = {
-        "R": (detect_material, "R"),
-        "G": (detect_material, "G"),
-        "B": (detect_material, "B"),
+        "R": (applications.detect_material, "R"),
+        "G": (applications.detect_material, "G"),
+        "B": (applications.detect_material, "B"),
         "C": (applications.detect_circle, None),
+        "F": (reflesh_img, None)
     }
 
     try:

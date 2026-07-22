@@ -1,55 +1,55 @@
 system:
-  serial_port: "/dev/ttyS3"
-  udp_interface: ""
+  serial_port: /dev/ttyS3
+  udp_interface: ''
   udp_port: 8080
-  udp_target_ip: ""
-  switch_pin: "GPIO3-A3"
+  udp_target_ip: ''
+  switch_pin: GPIO3-A3
   switch_reverse: true
-  start_led_pin: "GPIO3-A2"
-  detecting_led_pin: "GPIO3-A4"
+  start_led_pin: GPIO3-A2
+  detecting_led_pin: GPIO3-A4
   oled_i2c_port: 2
-  oled_i2c_address: 0x3C
-  camera_name: "icspring camera"
+  oled_i2c_address: 60
+  camera_name: icspring camera
 color:
-  B:
-    L_S: 41
-    L_V: 29
-    U_S: 255
-    U_V: 255
-    centre: 108
-    error: 12
-  G:
-    L_S: 41
-    L_V: 29
-    U_S: 255
-    U_V: 255
-    centre: 69
-    error: 12
   R:
-    L_S: 41
-    L_V: 29
-    U_S: 255
-    U_V: 255
     centre: 0
     error: 12
+    L_S: 89
+    U_S: 255
+    L_V: 29
+    U_V: 255
+  G:
+    centre: 69
+    error: 12
+    L_S: 41
+    U_S: 255
+    L_V: 29
+    U_V: 255
+  B:
+    centre: 108
+    error: 7
+    L_S: 70
+    U_S: 255
+    L_V: 37
+    U_V: 255
 color_ring:
-  alpha: 4.4
+  erode_iter: 1
+  dilate_kernel_size: 5
   clahe_clip_limit: 0.8
   clahe_tile_size: 8
-  dilate_kernel_size: 5
-  erode_iter: 1
-  expected_circles: 5
-  gaussian_kernel_size: 9
-  gaussian_sigma: 1.5
   hough_dp: 0.9
   hough_min_dist: 68
   hough_param1: 72
   hough_param2: 100
-  max_radius: 281
   min_radius: 54
+  max_radius: 281
+  expected_circles: 5
   morph_kernel_size: 3
+  gaussian_kernel_size: 9
+  gaussian_sigma: 1.5
+  alpha: 4.4
   threshold_value: 69
-max_material_area: 300000
 min_material_area: 5940
+max_material_area: 300000
 need2cut_height: 0
 target_angle: 46

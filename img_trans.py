@@ -28,20 +28,22 @@ from loguru import logger
 _log = logger.bind(module="img_trans")
 
 
-def _load_camera_name(path: str = "config.yaml") -> str:
-    """从配置文件中读取摄像头设备名，失败时使用默认值。"""
+def _load_system_config(path: str = "config.yaml") -> dict:
+    """从配置文件中读取 system 段，失败时返回空字典。"""
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-        return data.get("system", {}).get("camera_name", "icspring camera")
+        return data.get("system", {}) if isinstance(data, dict) else {}
     except Exception:
-        return "icspring camera"
+        return {}
 
 
 async def main_linux():
     """Linux平台的主函数"""
-    stream = await SendImgUDP.create("eth0", 4444)
-    camera_name = _load_camera_name()
+    system = _load_system_config()
+    interface = str(system.get("udp_interface", ""))
+    camera_name = str(system.get("camera_name", "icspring camera"))
+    stream = await SendImgUDP.create(interface, 4444)
     cap = Cap(camera_name=camera_name)
 
     # 等待连接

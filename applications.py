@@ -50,7 +50,8 @@ class Applications:
         检测图片中的物料位置
         ----
         :param img: 输入图片
-        :param color_label: 颜色标签,包含['R','G','B']
+        :param color_label: 颜色标签，须为 colorDetector.color_threshold 中已配置的键，
+                            默认为 ['R','G','B']，可按需在 config.yaml 与 color_threshold 中扩展（如 'Y'）
         :return: 物料位置的坐标（x, y）, 处理后的图像（绘制轮廓）
         """
         async with self._lock:

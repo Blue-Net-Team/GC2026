@@ -26,13 +26,13 @@ Usart类
 串口通信类，继承自 `serial.Serial`，提供了读取、发送和清除缓存区的方法。
 
 方法：
-- `__init__(self, port, baudrate=9600, timeout=None)`:
+- `__init__(self, port, baudrate=115200, timeout=0.5)`:
     初始化串口通信对象。
 
     参数:
         - `port`: 串口端口
-        - `baudrate`: 波特率，默认9600
-        - `timeout`: 超时时间，默认无
+        - `baudrate`: 波特率，默认115200
+        - `timeout`: 超时时间（秒），默认0.5
 - `read(self, head: str, tail: str = "\n") -> str`:
     读取数据，直到遇到指定的包头和包尾。
 
@@ -73,8 +73,8 @@ class Uart(serial.Serial):
         ----
         Args:
             port (str): 串口端口
-            baudrate (int): 波特率，默认9600
-            timeout (float): 超时时间，默认无
+            baudrate (int): 波特率，默认115200
+            timeout (float): 超时时间（秒），默认0.5
         """
         super().__init__(port=port, baudrate=baudrate, timeout=timeout)
         self.read_flag = True

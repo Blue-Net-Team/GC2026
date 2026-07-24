@@ -11,7 +11,7 @@ from loguru import logger
 _log = logger.bind(module="setup")
 
 # mockCap = MockImage("test.jpg")
-mockCap = MockVideo(r"mock_data\test.avi")
+mockCap = MockVideo(os.path.join("mock_data", "test.avi"))
 
 class Setup:
     def __init__(self, cap: cv2.VideoCapture) -> None:

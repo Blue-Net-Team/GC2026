@@ -34,17 +34,9 @@ app = [
     "qasync>=0.28.0",
 ]
 
-test = [
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.3.0",
-]
-
 board = [
     "python-periphery>=2.4.0",
 ]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
 
 [project.scripts]
 main = "main:cli"

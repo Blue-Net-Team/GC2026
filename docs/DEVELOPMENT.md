@@ -2,6 +2,8 @@
 
 > 本文档面向 GC2026 的维护者与贡献者，说明项目的整体架构、识别器（Detector）开发契约，以及如何在不破坏现有功能的前提下添加新功能。
 >
+> 想了解这些约定**为什么**存在（设计模式、分层理由、并发模型取舍），请阅读 [`DESIGN.md`](./DESIGN.md)。
+>
 > 若你只关心桌面调参应用（`app/`）的 UI 规范，请先看 [`APP_DEV_SPEC.md`](./APP_DEV_SPEC.md)。
 
 ---
@@ -10,7 +12,7 @@
 
 GC2026 的运行时核心分为三层：
 
-- **main 层**（`main.py`）：程序入口与事件循环，负责编排图像处理、OLED 显示、UDP 图传三个协程；读取串口任务、调用应用层、回传结果、准备图传图像。
+- **main 层**（`main.py`）：程序入口与事件循环，负责编排图像处理、OLED 显示、UDP 图传、配置热加载四个协程；读取串口任务、调用应用层、回传结果、准备图传图像。
 - **应用层**（`applications.py`）：业务调度器，根据任务字调用识别器，并把识别结果转换为对外格式。
 - **基础设施层**（`utils/`、`ImgTrans/`、`detector/`）：提供硬件抽象、UDP 图传、配置加载、视觉算法等可复用能力。
 
@@ -29,7 +31,7 @@ GC2026 的运行时核心分为三层：
 
 | 层级 | 代表文件/目录 | 主要职责 |
 |------|---------------|----------|
-| **main 层** | `main.py` | 事件循环、协程编排、串口任务读取、结果回传、图传图像准备 |
+| **main 层** | `main.py` | 事件循环、协程编排（图像处理/OLED/图传/配置热加载）、串口任务读取、结果回传、图传图像准备 |
 | **应用层** | `applications.py` | 按任务字调度识别器、处理识别结果、转换为对外格式 |
 | **基础设施层** | `utils/`、`ImgTrans/`、`detector/` | 硬件抽象、通信、配置加载、视觉算法等可复用能力 |
 
@@ -79,14 +81,14 @@ GC2026 的运行时核心分为三层：
 
 | 层级 | 主要职责 | 禁止行为 |
 |------|----------|----------|
-| **main 层** | 协程编排、串口读取、通过 `TASK_TABLE` 选择应用层方法、结果回传、图传/OLED 准备 | 包含视觉算法细节；直接实例化并调用识别器（应通过 `Applications`） |
-| **应用层** | 提供按任务类型封装的业务方法、调用识别器、结果格式化、识别器实例管理 | 决定“哪个任务字调用谁”（由 `main.py` 的 `TASK_TABLE` 决定）；直接写死识别器内部算法参数；直接操作串口/GPIO/网络 |
+| **main 层** | 协程编排、串口读取、通过 `task_table` 选择应用层方法、结果回传、图传/OLED 准备 | 包含视觉算法细节；直接实例化并调用识别器（应通过 `Applications`） |
+| **应用层** | 提供按任务类型封装的业务方法、调用识别器、结果格式化、识别器实例管理 | 决定“哪个任务字调用谁”（由 `main.py` 的 `task_table` 决定）；直接写死识别器内部算法参数；直接操作串口/GPIO/网络 |
 | **基础设施层** | 提供硬件、通信、算法等可复用能力 | 包含业务判断逻辑；跨层依赖 UI 框架 |
 | **调参工具** | 调用识别器接口调试参数、持久化 `config.yaml` | 在嵌入式运行时中直接参与任务闭环 |
 
 ### 2.2 main 层与应用层的区别
 
-- **main 层**只关心“有没有任务、任务交给谁、结果怎么发、图传怎么送”。它通过 `TASK_TABLE` 把任务字映射到 `Applications` 的方法，但并不知道 `detect_material` 内部用的是 HSV 还是霍夫圆。
+- **main 层**只关心“有没有任务、任务交给谁、结果怎么发、图传怎么送”。它通过 `task_table` 把任务字映射到 `Applications` 的方法，但并不知道 `detect_material` 内部用的是 HSV 还是霍夫圆。
 - **应用层**关心“这个任务该用哪个识别器、结果坐标怎么转换、可视化图像怎么拼”。它持有识别器实例，是识别器与 main 层之间的唯一接口。
 
 ### 2.3 调用关系
@@ -94,22 +96,31 @@ GC2026 的运行时核心分为三层：
 #### 运行时调用链
 
 1. `main.py` 通过 `Uart` 读取 `@...#` 任务字；
-2. 根据 `TASK_TABLE` 调用 `applications.py` 中的对应方法；
+2. 根据 `task_table` 调用 `applications.py` 中的对应方法；
 3. `Applications` 调用识别器的 `detect()` 和 `visualize()`，得到 `(coord, draw_img)`；
 4. `main.py` 把坐标写回串口，把 `draw_img` 交给 `img_trans()` 发送。
 
-#### TASK_TABLE 与任务字扩展
+#### task_table 与任务字扩展
 
-`main.py` 中的 `TASK_TABLE` 是“串口任务字 → 应用层方法”的唯一映射表：
+`main.py` 中的 `task_table` 是“串口任务字 → 应用层方法”的唯一映射表：
 
 ```python
-TASK_TABLE = {
+task_table = {
     "R": (applications.detect_material, "R"),
     "G": (applications.detect_material, "G"),
     "B": (applications.detect_material, "B"),
     "C": (applications.detect_circle, None),
+    "F": (refresh_img, None),
 }
 ```
+
+其中 `F` 任务（`refresh_img`）用于刷新摄像头缓存：连续读取 5 帧丢弃旧帧，返回 `None`，主程序回写 `FFFFFFFF`。
+
+任务字语义约定（与电控端配合）：
+
+- `R` / `G` / `B`：检测对应颜色色块/物料中心。第一轮取料识别物料；**第二轮码垛定位也用颜色任务**——此时第一层物料已码好，直接以物料颜色为基准定位。码垛高度下视野中会同时出现多个圆（圆环靶标 + 已码物料边缘），霍夫圆检测无法区分，用 `C` 可能返回错误圆环坐标。
+- `C`：检测地面色环靶标中心，仅在视野中无已码物料时使用（第一轮定位）。
+- `F`：切换检测场景前由电控端发送，丢弃摄像头缓存中的陈旧帧。
 
 每个条目是一个二元组：
 
@@ -119,19 +130,19 @@ TASK_TABLE = {
 `main()` 协程中的实际调用代码为：
 
 ```python
-res, res_img = await TASK_TABLE[task_sign][0](
-    img, TASK_TABLE[task_sign][1]
+res, res_img = await task_table[task_sign][0](
+    img, task_table[task_sign][1]
 )
 ```
 
 **应用层方法签名要求**
 
-被 `TASK_TABLE` 指向的方法必须满足以下约定：
+被 `task_table` 指向的方法必须满足以下约定：
 
 - 必须是协程：`async def ...`，因为 `main.py` 使用 `await` 调用；
 - 第一个参数为 `self`；
 - 第二个参数为 `img: cv2.typing.MatLike`，即当前帧原始图像；
-- 第三个参数（可选）用于接收 `TASK_TABLE` 中的附加参数，建议写成 `label=None` 并给默认值；
+- 第三个参数（可选）用于接收 `task_table` 中的附加参数，建议写成 `label=None` 并给默认值；
 - 返回值必须是二元组 `(coord, draw_img)`：
   - `coord`：识别到的坐标，传 `None` 表示未识别到，或传 `(x, y)` 元组；`main.py` 会把它交给 `Applications.tuple2str()` 转换成固定长度字符串后写回串口；
   - `draw_img`：`np.ndarray` 类型可视化图像，会被 `main.py` 放入 `img_need_to_send` 通过 UDP 发送给客户端。
@@ -164,16 +175,16 @@ async def detect_my_target(
    self.myDetector = MyDetector()
    self.myDetector.load_config(config_path)
    ```
-3. 在 `main.py` 的 `TASK_TABLE` 中新增映射：
+3. 在 `main.py` 的 `task_table` 中新增映射：
    ```python
-   TASK_TABLE = {
+   task_table = {
        ...
        "M": (applications.detect_my_target, None),
    }
    ```
 4. 如果新识别器需要桌面调参页面，在 `app/ui/main_window.py` 的 `DETECTOR_REGISTRY` 中注册。
 
-> **注意**：任务字 → 方法的映射**只能**放在 `main.py` 的 `TASK_TABLE`，应用层只负责提供可调用的业务方法，不能自行决定响应哪些任务字。
+> **注意**：任务字 → 方法的映射**只能**放在 `main.py` 的 `task_table`，应用层只负责提供可调用的业务方法，不能自行决定响应哪些任务字。
 
 #### 调参调用链
 
@@ -448,14 +459,15 @@ async def detect_my_target(self, img: cv2.typing.MatLike):
     return (cx, cy), draw_img
 ```
 
-然后在 `main.py` 的 `TASK_TABLE` 中注册任务字：
+然后在 `main.py` 的 `task_table` 中注册任务字：
 
 ```python
-TASK_TABLE = {
+task_table = {
     "R": (applications.detect_material, "R"),
     "G": (applications.detect_material, "G"),
     "B": (applications.detect_material, "B"),
     "C": (applications.detect_circle, None),
+    "F": (refresh_img, None),
     "M": (applications.detect_my_target, None),
 }
 ```
@@ -480,6 +492,7 @@ TASK_TABLE = {
 
 - **不要引入 PyQt6**：`detector/` 只能依赖 `cv2`、`numpy`、`loguru` 等通用库。
 - **参数类型安全**：UI 滑条传回的值是 `float`，必须在 `set_tunable_value` 中把 `param_type == "int"` 的参数截断为整数。基类已实现默认逻辑，若覆盖请勿遗漏。
+- **颜色分组自动渲染为 Tab**：只要 `TUNABLE_PARAMS.color_groups` 包含新颜色名（如 `"Y"`），桌面应用的 `detector_tuner_screen.py` 会自动生成对应颜色 Tab，无需在 `DETECTOR_REGISTRY` 或其他 UI 文件中单独注册。
 - **不要阻塞事件循环**：`detect()` 是协程，但内部若调用长时间 `cv2` 操作，仍可能阻塞 `asyncio` 事件循环。耗时操作应通过 `run_in_executor` 放到线程池。
 - **返回一致性**：`detect()` 必须始终返回 `(result, binary)`，其中 `binary` 是单通道灰度/二值图或三通道图，用于下侧预览。
 

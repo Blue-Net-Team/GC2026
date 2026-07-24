@@ -3,7 +3,7 @@
 # 如果有sd卡并且插上，设置自动挂载
 # uid和gid可以用id -u和id -g查看
 sudo mkdir -p /media/sdcard
-sudo echo "/dev/mmcblk1p1 /media/sdcard auto defaults,uid=1000,gid=1000 0 0" >> /etc/fstab
+echo "/dev/mmcblk1p1 /media/sdcard auto defaults,uid=1000,gid=1000 0 0" | sudo tee -a /etc/fstab
 sudo mount -a
 
 # 连接wifi
@@ -56,10 +56,10 @@ echo "  Port 22" >> ~/.ssh/config
 echo "  User git" >> ~/.ssh/config
 
 # ------------------ 配置静态ip ------------------
-sudo echo "auto eth0" >> /etc/network/interfaces
-sudo echo "iface eth0 inet static" >> /etc/network/interfaces
-sudo echo "address 169.254.133.100" >> /etc/network/interfaces
-sudo echo "netmask 255.255.0.0" >> /etc/network/interfaces
+echo "auto eth0" | sudo tee -a /etc/network/interfaces
+echo "iface eth0 inet static" | sudo tee -a /etc/network/interfaces
+echo "address 169.254.133.100" | sudo tee -a /etc/network/interfaces
+echo "netmask 255.255.0.0" | sudo tee -a /etc/network/interfaces
 
 # 重启服务
 sudo systemctl restart networking

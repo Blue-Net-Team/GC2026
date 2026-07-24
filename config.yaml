@@ -1,15 +1,15 @@
 system:
-  serial_port: /dev/ttyS3
-  udp_interface: ''
-  udp_port: 8080
-  udp_target_ip: ''
-  switch_pin: GPIO3-A3
-  switch_reverse: true
-  start_led_pin: GPIO3-A2
-  detecting_led_pin: GPIO3-A4
-  oled_i2c_port: 2
-  oled_i2c_address: 60
-  camera_name: icspring camera
+  serial_port: /dev/ttyS3      # 与主控通信的串口设备
+  udp_interface: ''            # UDP 绑定网卡，空字符串表示所有网卡
+  udp_port: 8080               # UDP 图传端口
+  udp_target_ip: ''            # 预配置图传接收端 IP，空表示等待客户端 connect 握手（支持热加载）
+  switch_pin: GPIO3-A3         # 运行模式拨码开关引脚
+  switch_reverse: true         # 是否反转开关电平
+  start_led_pin: GPIO3-A2      # main 模式指示 LED 引脚
+  detecting_led_pin: GPIO3-A4  # 检测中指示 LED 引脚
+  oled_i2c_port: 2             # OLED 的 I2C 总线号
+  oled_i2c_address: 60         # OLED 的 I2C 地址（十进制，0x3C）
+  camera_name: icspring camera # 摄像头名称，用 v4l2-ctl --list-devices 查看
 color:
   R:
     centre: 0
@@ -49,7 +49,7 @@ color_ring:
   gaussian_sigma: 1.5
   alpha: 4.4
   threshold_value: 69
-min_material_area: 5940
-max_material_area: 300000
-need2cut_height: 0
-target_angle: 46
+min_material_area: 5940        # 物料轮廓最小面积（像素²）
+max_material_area: 300000      # 物料轮廓最大面积（像素²）
+need2cut_height: 0             # 识别时从画面底部裁掉的高度（像素）
+target_angle: 46               # 目标偏航角（°），用于视觉定位补偿
